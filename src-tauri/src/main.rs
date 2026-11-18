@@ -107,30 +107,41 @@ fn main() {
         .expect("error running Nematode");
 }
 
+// Locking rule: never call into Tauri (monitors, window, menu, eval) while holding STATE.
+// Those calls hop to the main thread, and the main thread may itself be waiting for STATE (menu clicks).
+
 fn toggle_summon(app: &AppHandle) {
     let Some(win) = app.get_webview_window("main") else { return };
-    {
+    let summoning = {
         let mut s = STATE.lock().unwrap();
         match mode(&s) {
             Mode::Summoned => {
                 s.summoned = false;
                 s.snoozed = s.spot.is_some(); // dismiss means leave, even from your Claude tab
+                false
             }
             Mode::Away => {
                 s.summoned = true;
-                // Come out on the screen you're looking at.
-                let c = app.cursor_position().unwrap_or_default();
-                let scale = app.primary_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
-                let (r, _) = monitor_at(&win, c.x / scale, c.y / scale);
-                if r != s.screen {
-                    place(&win, r);
-                    s.screen = r;
-                    s.sent.clear();
-                    drop(s);
-                    let _ = win.eval("nema({reset:true,mode:'away'})");
-                }
+                true
             }
-            Mode::OnTab => {} // grayed out
+            Mode::OnTab => return, // grayed out
+        }
+    };
+    if summoning {
+        // Come out on the screen you're looking at.
+        let c = app.cursor_position().unwrap_or_default();
+        let scale = app.primary_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
+        let (r, _) = monitor_at(&win, c.x / scale, c.y / scale);
+        let moved = {
+            let mut s = STATE.lock().unwrap();
+            let moved = r != s.screen;
+            s.screen = r;
+            s.sent.clear();
+            moved
+        };
+        if moved {
+            place(&win, r);
+            let _ = win.eval("nema({reset:true,mode:'away'})");
         }
     }
     sync(&win);
@@ -146,31 +157,33 @@ fn mode(s: &State) -> Mode {
 
 /// Tells the overlay and the menu about the current state, if it changed.
 fn sync(win: &WebviewWindow) {
-    let mut s = STATE.lock().unwrap();
-    let m = mode(&s);
-    let tab = s.spot.filter(|_| m != Mode::Away);
-    let mut reset = false;
-    let js = match (m, tab) {
-        (Mode::Away, _) => "nema({mode:'away'})".to_string(),
+    let (m, spot, screen) = {
+        let s = STATE.lock().unwrap();
+        (mode(&s), s.spot, s.screen)
+    };
+    let (js, r) = match (m, spot) {
+        (Mode::Away, _) => ("nema({mode:'away'})".to_string(), screen),
         (_, Some((x, y))) => {
             let (r, floor) = monitor_at(win, x, y);
-            if r != s.screen {
-                place(win, r);
-                s.screen = r;
-                reset = true;
-            }
-            format!("nema({{reset:{reset},mode:'tab',x:{},y:{},floor:{floor}}})", x - r.0, y - r.1)
+            let reset = r != screen;
+            (format!("nema({{reset:{reset},mode:'tab',x:{},y:{},floor:{floor}}})", x - r.0, y - r.1), r)
         }
         (_, None) => {
-            let (_, floor) = monitor_at(win, s.screen.0 + 1.0, s.screen.1 + 1.0);
-            format!("nema({{mode:'free',floor:{floor}}})")
+            let (_, floor) = monitor_at(win, screen.0 + 1.0, screen.1 + 1.0);
+            (format!("nema({{mode:'free',floor:{floor}}})"), screen)
         }
     };
-    if js == s.sent {
-        return;
+    {
+        let mut s = STATE.lock().unwrap();
+        if js == s.sent {
+            return;
+        }
+        s.sent = js.clone();
+        s.screen = r;
     }
-    s.sent = js.clone();
-    drop(s);
+    if r != screen {
+        place(win, r);
+    }
     let _ = win.eval(&js);
     if let Some(item) = SUMMON.get() {
         let _ = item.set_text(if m == Mode::Summoned { "Dismiss Nematode" } else { "Summon Nematode" });
