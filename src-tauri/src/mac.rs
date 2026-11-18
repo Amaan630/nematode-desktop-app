@@ -130,3 +130,24 @@ pub fn float_above_menu_bar(ns_window: *mut c_void) {
         let _: () = msg_send![ns, setCollectionBehavior: behavior];
     }
 }
+
+/// Sets (Some png) or clears (None) the custom Finder/Launchpad icon on this app's bundle.
+/// The code signature still validates and Accessibility stays granted (checked on a real install).
+pub fn set_app_icon(png: Option<&[u8]>) {
+    let bundle = std::env::current_exe().ok().and_then(|p| p.ancestors().nth(3).map(|b| b.to_path_buf()));
+    let Some(bundle) = bundle.filter(|b| b.extension().is_some_and(|e| e == "app")) else { return }; // dev builds: no bundle
+    let path = CFString::new(&bundle.to_string_lossy());
+    autoreleasepool(|_| unsafe {
+        let ws: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let mut img: *mut AnyObject = std::ptr::null_mut();
+        if let Some(b) = png {
+            let data: *mut AnyObject = msg_send![class!(NSData), dataWithBytes: b.as_ptr() as *const c_void, length: b.len()];
+            let alloc: *mut AnyObject = msg_send![class!(NSImage), alloc];
+            img = msg_send![alloc, initWithData: data];
+        }
+        let _: bool = msg_send![ws, setIcon: img, forFile: path.as_concrete_TypeRef() as *mut AnyObject, options: 0usize];
+        if !img.is_null() {
+            let _: () = msg_send![img, release];
+        }
+    })
+}

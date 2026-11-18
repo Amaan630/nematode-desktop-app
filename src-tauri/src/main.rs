@@ -7,7 +7,7 @@ mod win;
 use std::{sync::Mutex, sync::OnceLock, time::Duration};
 use tauri::{
     image::Image,
-    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
+    menu::{CheckMenuItem, IconMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::TrayIconBuilder,
     AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry,
 };
@@ -36,6 +36,15 @@ static STATE: Mutex<State> = Mutex::new(State {
     screen: (0.0, 0.0, 0.0, 0.0), spot: None, summoned: false, snoozed: false, sent: String::new(), focus_pid: 0,
 });
 static SUMMON: OnceLock<MenuItem<Wry>> = OnceLock::new();
+static ICON_ITEMS: OnceLock<Vec<IconMenuItem<Wry>>> = OnceLock::new();
+
+/// Switchable app icons: id, menu label, the icon itself, its menu preview. The first is the bundle's default.
+const ICONS: [(&str, &str, &[u8], &[u8]); 4] = [
+    ("pinkblue", "Pink & Blue", include_bytes!("../icons/variants/pinkblue.png"), include_bytes!("../icons/variants/pinkblue-menu.png")),
+    ("acid", "Acid", include_bytes!("../icons/variants/acid.png"), include_bytes!("../icons/variants/acid-menu.png")),
+    ("halftone", "Halftone", include_bytes!("../icons/variants/halftone.png"), include_bytes!("../icons/variants/halftone-menu.png")),
+    ("warhol", "Warhol", include_bytes!("../icons/variants/warhol.png"), include_bytes!("../icons/variants/warhol-menu.png")),
+];
 
 fn main() {
     tauri::Builder::default()
@@ -67,9 +76,19 @@ fn main() {
             let login = CheckMenuItem::with_id(app, "login", "Open at Login", true, autostart.is_enabled().unwrap_or(false), None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Nematode", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
-            let menu = Menu::with_items(app, &[&summon, &sep, &login, &quit])?;
+            let chosen = std::fs::read_to_string(icon_choice_file(app.handle())).unwrap_or_default();
+            let chosen = ICONS.iter().find(|i| i.0 == chosen).map_or(ICONS[0].0, |i| i.0);
+            let mut icon_items = vec![];
+            for (id, label, _, preview) in ICONS {
+                icon_items.push(IconMenuItem::with_id(app, format!("icon:{id}"), label, true, Some(Image::from_bytes(preview)?), None::<&str>)?);
+            }
+            let refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = icon_items.iter().map(|i| i as _).collect();
+            let icons = Submenu::with_items(app, "App Icon", true, &refs)?;
+            let sep2 = PredefinedMenuItem::separator(app)?;
+            let menu = Menu::with_items(app, &[&summon, &sep, &icons, &login, &sep2, &quit])?;
             let _ = SUMMON.set(summon);
-            TrayIconBuilder::new()
+            let _ = ICON_ITEMS.set(icon_items);
+            TrayIconBuilder::with_id("tray")
                 .icon(Image::from_bytes(include_bytes!("../icons/tray.png"))?)
                 .tooltip("Nematode")
                 .menu(&menu)
@@ -83,9 +102,12 @@ fn main() {
                         let _ = login.set_checked(a.is_enabled().unwrap_or(on));
                     }
                     "quit" => app.exit(0),
+                    id if id.starts_with("icon:") => set_icon(app, &id[5..]),
                     _ => {}
                 })
                 .build(app)?;
+
+            set_icon(app.handle(), chosen); // re-applies after updates, which replace the bundle
 
             #[cfg(target_os = "macos")]
             if !mac::trusted(false) {
@@ -126,6 +148,36 @@ async fn update(app: &AppHandle) -> tauri_plugin_updater::Result<()> {
         std::thread::sleep(Duration::from_secs(30)); // don't yank him off screen mid-stomp
     }
     app.restart();
+}
+
+fn icon_choice_file(app: &AppHandle) -> std::path::PathBuf {
+    app.path().app_data_dir().unwrap_or_default().join("icon")
+}
+
+/// Switches the app icon: on macOS the Finder/Launchpad/Applications icon, on Windows the tray icon
+/// (the only icon Nematode shows there). Remembers the choice and ticks it in the menu.
+fn set_icon(app: &AppHandle, id: &str) {
+    let Some(&(id, _, full, preview)) = ICONS.iter().find(|i| i.0 == id) else { return };
+    let file = icon_choice_file(app);
+    let _ = std::fs::create_dir_all(file.parent().unwrap());
+    let _ = std::fs::write(file, id);
+    #[cfg(target_os = "macos")]
+    {
+        let _ = preview;
+        mac::set_app_icon((id != ICONS[0].0).then_some(full)); // default: drop the override, use the bundle's own
+    }
+    #[cfg(windows)]
+    {
+        let _ = full;
+        if let (Some(tray), Ok(img)) = (app.tray_by_id("tray"), Image::from_bytes(preview)) {
+            let _ = tray.set_icon(Some(img));
+        }
+    }
+    if let Some(items) = ICON_ITEMS.get() {
+        for (item, (iid, label, _, _)) in items.iter().zip(ICONS) {
+            let _ = item.set_text(if iid == id { format!("{label}  ✓") } else { label.to_string() });
+        }
+    }
 }
 
 // Locking rule: never call into Tauri (monitors, window, menu, eval) while holding STATE.

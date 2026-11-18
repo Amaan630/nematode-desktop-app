@@ -1,25 +1,82 @@
 <!doctype html>
-<!-- Renders the app icon (?icon) or the tray icon (?tray) for scripts/icons.sh. ?icon&bg=a,b previews other colors. -->
+<!-- Renders icons for scripts/icons.sh: ?v=pinkblue|acid|halftone|warhol (app icons) or ?tray (menu bar). -->
 <style>html, body { margin: 0; background: transparent }</style>
 <canvas width="1024" height="1024"></canvas>
 <script src="../src/nematode.js"></script>
 <script>
-const c = document.querySelector('canvas'), x = c.getContext('2d');
+const out = document.querySelector('canvas'), ctx = out.getContext('2d');
 const q = new URLSearchParams(location.search);
-if (q.has('tray')) {
-  drawNematode(x, { x: 512, ground: 1000, scale: 1000, face: -1 });
-} else {
-  // macOS icon grid: an 824px squircle centered in 1024. Flat fill, no baked-in shadow (the system adds one).
-  const [top, bottom] = (q.get('bg') || '#4a6f94,#33506e').split(',');
-  const sq = new Path2D(), n = 4.2, r = 412;
+
+// macOS icon grid: an 824px squircle centered in 1024.
+function squircle() {
+  const p = new Path2D(), n = 4.2, r = 412;
   for (let i = 0; i <= 360; i++) {
-    const a = i / 360 * 2 * Math.PI, ca = Math.cos(a), sa = Math.sin(a);
-    const px = 512 + r * Math.sign(ca) * Math.abs(ca) ** (2 / n), py = 512 + r * Math.sign(sa) * Math.abs(sa) ** (2 / n);
-    i ? sq.lineTo(px, py) : sq.moveTo(px, py);
+    const a = i / 360 * 2 * Math.PI, c = Math.cos(a), s = Math.sin(a);
+    const X = 512 + r * Math.sign(c) * Math.abs(c) ** (2 / n), Y = 512 + r * Math.sign(s) * Math.abs(s) ** (2 / n);
+    i ? p.lineTo(X, Y) : p.moveTo(X, Y);
   }
-  const g = x.createLinearGradient(0, 100, 0, 924);
-  g.addColorStop(0, top); g.addColorStop(1, bottom);
-  x.fillStyle = g; x.fill(sq);
-  drawNematode(x, { x: 512, ground: 862, scale: 640, face: -1 });
+  return p;
+}
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+
+// Grayscale source: him alone, lit from the top-left, over solid black (which becomes flat ink).
+function source(size, scale = .5, x0 = .5, ground = .77) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const x = c.getContext('2d');
+  drawNematode(x, { x: size * x0, ground: size * ground, scale: size * scale, face: -1 });
+  x.globalCompositeOperation = 'source-atop';
+  const g = x.createLinearGradient(size * .25, size * .15, size * .8, size * .9);
+  g.addColorStop(0, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(0,0,0,.45)');
+  x.fillStyle = g; x.fillRect(0, 0, size, size);
+  x.globalCompositeOperation = 'destination-over';
+  x.fillStyle = '#000'; x.fillRect(0, 0, size, size);
+  return x.getImageData(0, 0, size, size);
+}
+
+// Ordered (Bayer) dither to two inks; the black backdrop stays solid ink.
+const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+function dither(img, ink, paper, contrast = 1.35) {
+  const [a, b] = [hex(ink), hex(paper)], d = img.data, w = img.width;
+  for (let i = 0; i < d.length; i += 4) {
+    const px = (i / 4) % w, py = Math.floor(i / 4 / w);
+    let l = (.3 * d[i] + .59 * d[i + 1] + .11 * d[i + 2]) / 255;
+    l = l < .04 ? 0 : Math.min(1, Math.max(.06, (l - .5) * contrast + .55));
+    const c = l > (BAYER[py % 4][px % 4] + .5) / 16 ? b : a;
+    d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+  }
+  return img;
+}
+// Draw a low-res dither into (x, y, size), hard pixels.
+function pixels(img, x, y, size) {
+  const t = document.createElement('canvas'); t.width = t.height = img.width;
+  t.getContext('2d').putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(t, x, y, size, size);
+}
+
+const variants = {
+  pinkblue: () => pixels(dither(source(120), '#2020ff', '#ff6fae'), 0, 0, 1024),
+  acid: () => pixels(dither(source(120), '#101010', '#e9ff3b'), 0, 0, 1024),
+  halftone: () => { // light dots on a solid red field, dot size follows brightness
+    const img = source(1024), d = img.data, cell = 22;
+    ctx.fillStyle = '#ef3b2c'; ctx.fillRect(0, 0, 1024, 1024); ctx.fillStyle = '#f6efdc';
+    for (let y = cell / 2; y < 1024; y += cell) for (let x = cell / 2; x < 1024; x += cell) {
+      const i = (Math.floor(y) * 1024 + Math.floor(x)) * 4;
+      const r = cell * .66 * Math.sqrt(Math.min(1, (.3 * d[i] + .59 * d[i + 1] + .11 * d[i + 2]) / 255 * 1.2));
+      if (r > .5) { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); }
+    }
+  },
+  warhol: () => [['#1b1bff', '#ff5fa2'], ['#121212', '#f4ff3a'], ['#d81e1e', '#7cf0ff'], ['#3b0a6b', '#ff9a2e']]
+    .forEach(([ink, paper], k) => pixels(
+      dither(source(72, .45, [.55, .45, .55, .45][k], [.79, .79, .73, .73][k]), ink, paper),
+      (k % 2) * 512, Math.floor(k / 2) * 512, 512)),
+};
+
+if (q.has('tray')) {
+  drawNematode(ctx, { x: 512, ground: 1000, scale: 1000, face: -1 });
+} else {
+  ctx.save(); ctx.clip(squircle());
+  (variants[q.get('v')] || variants.pinkblue)();
+  ctx.restore();
 }
 </script>
