@@ -124,3 +124,61 @@ pub fn restore() {
         let _ = unsafe { SetForegroundWindow(HWND(h as _)) };
     }
 }
+
+/// Points Nematode's shortcuts (Start menu, desktop, taskbar pin) at `icon` (None: the app's own icon),
+/// then tells Explorer that icons changed. Explorer refreshes them in place; nothing restarts.
+/// Each icon lives at its own path, so Windows' icon cache can't serve a stale one.
+pub fn set_shortcut_icons(icon: Option<&std::path::Path>) {
+    use windows::{
+        core::{Interface, HSTRING},
+        Win32::{
+            System::Com::{CoTaskMemFree, IPersistFile, STGM_READWRITE},
+            UI::Shell::{
+                FOLDERID_Desktop, FOLDERID_Programs, IShellLinkW, SHChangeNotify, SHGetKnownFolderPath, ShellLink,
+                KF_FLAG_DEFAULT, SHCNE_ASSOCCHANGED, SHCNF_IDLIST,
+            },
+        },
+    };
+    let Ok(exe) = std::env::current_exe() else { return };
+    let icon = icon.unwrap_or(&exe);
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED); // no-op if this thread already has COM
+        let known = |id| SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None).ok().map(|p| {
+            let s = std::path::PathBuf::from(p.to_string().unwrap_or_default());
+            CoTaskMemFree(Some(p.0 as _));
+            s
+        });
+        let mut dirs: Vec<std::path::PathBuf> = [known(&FOLDERID_Programs), known(&FOLDERID_Desktop)].into_iter().flatten().collect();
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            dirs.push(std::path::Path::new(&appdata).join(r"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"));
+        }
+        // Shortcuts sit directly in these folders, or one folder down in the Start menu.
+        let mut links = vec![];
+        for d in &dirs {
+            for e in std::fs::read_dir(d).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    links.extend(std::fs::read_dir(&p).into_iter().flatten().flatten().map(|e| e.path()));
+                } else {
+                    links.push(p);
+                }
+            }
+        }
+        let mut changed = false;
+        for lnk in links.into_iter().filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("lnk"))) {
+            let Ok(link) = CoCreateInstance::<_, IShellLinkW>(&ShellLink, None, CLSCTX_INPROC_SERVER) else { continue };
+            let Ok(file) = link.cast::<IPersistFile>() else { continue };
+            if file.Load(&HSTRING::from(lnk.as_os_str()), STGM_READWRITE).is_err() { continue }
+            let mut target = [0u16; 1024];
+            if link.GetPath(&mut target, std::ptr::null_mut(), 0).is_err() { continue }
+            let target = String::from_utf16_lossy(&target[..target.iter().position(|&c| c == 0).unwrap_or(0)]);
+            if !target.eq_ignore_ascii_case(&exe.to_string_lossy()) { continue } // not one of ours
+            if link.SetIconLocation(&HSTRING::from(icon.as_os_str()), 0).is_ok() && file.Save(None, true).is_ok() {
+                changed = true;
+            }
+        }
+        if changed {
+            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
+        }
+    }
+}

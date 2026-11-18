@@ -12,6 +12,9 @@ for v in pinkblue acid halftone purple; do
   shot "v=$v" "build/icon-$v.png"
   sips -Z 512 "build/icon-$v.png" --out "src-tauri/icons/variants/$v.png" >/dev/null   # applied as the app icon
   sips -Z 64 "build/icon-$v.png" --out "src-tauri/icons/variants/$v-menu.png" >/dev/null # menu preview (shown at 18pt)
+  ICO=$(mktemp -d)                                                                         # Windows shortcuts use .ico
+  npx tauri icon "build/icon-$v.png" -o "$ICO" >/dev/null 2>&1 && cp "$ICO/icon.ico" "src-tauri/icons/variants/$v.ico"
+  rm -rf "$ICO"
 done
 cp build/icon-pinkblue.png build/icon.png
 

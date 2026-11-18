@@ -45,6 +45,14 @@ const ICONS: [(&str, &str, &[u8], &[u8]); 4] = [
     ("halftone", "Halftone", include_bytes!("../icons/variants/halftone.png"), include_bytes!("../icons/variants/halftone-menu.png")),
     ("purple", "Purple", include_bytes!("../icons/variants/purple.png"), include_bytes!("../icons/variants/purple-menu.png")),
 ];
+/// Windows shortcut icons, in the same order as ICONS.
+#[cfg(windows)]
+const ICOS: [&[u8]; 4] = [
+    include_bytes!("../icons/variants/pinkblue.ico"),
+    include_bytes!("../icons/variants/acid.ico"),
+    include_bytes!("../icons/variants/halftone.ico"),
+    include_bytes!("../icons/variants/purple.ico"),
+];
 
 fn main() {
     tauri::Builder::default()
@@ -154,8 +162,8 @@ fn icon_choice_file(app: &AppHandle) -> std::path::PathBuf {
     app.path().app_data_dir().unwrap_or_default().join("icon")
 }
 
-/// Switches the app icon: on macOS in Finder/Launchpad and the Dock, on Windows the tray icon
-/// (the only icon Nematode shows there). Remembers the choice and ticks it in the menu.
+/// Switches the app icon: on macOS in Finder/Launchpad and the Dock, on Windows the tray icon and
+/// the Start menu, desktop and taskbar shortcuts. Remembers the choice and ticks it in the menu.
 fn set_icon(app: &AppHandle, id: &str) {
     let Some(&(id, _, full, preview)) = ICONS.iter().find(|i| i.0 == id) else { return };
     let file = icon_choice_file(app);
@@ -173,6 +181,12 @@ fn set_icon(app: &AppHandle, id: &str) {
         if let (Some(tray), Ok(img)) = (app.tray_by_id("tray"), Image::from_bytes(preview)) {
             let _ = tray.set_icon(Some(img));
         }
+        // Start menu, desktop and taskbar shortcuts. Default: back to the app's own icon.
+        let ico = ICONS.iter().position(|i| i.0 == id).filter(|&i| i > 0).and_then(|i| {
+            let path = app.path().app_data_dir().ok()?.join(format!("icon-{id}.ico"));
+            std::fs::write(&path, ICOS[i]).ok().map(|_| path)
+        });
+        win::set_shortcut_icons(ico.as_deref());
     }
     if let Some(items) = ICON_ITEMS.get() {
         for (item, (iid, label, _, _)) in items.iter().zip(ICONS) {
