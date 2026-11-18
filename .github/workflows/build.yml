@@ -52,18 +52,29 @@ jobs:
         run: |
           set -e
           mkdir out
-          find artifacts -type f \( -name 'Nematode.dmg' -o -name 'Nematode.app.tar.gz*' -o -name '*-setup.exe*' \) -exec cp {} out/ \;
+          # Plain names people can tell apart; the update package and latest.json are for the app itself.
+          cp "$(find artifacts -name Nematode.dmg | head -1)" out/Nematode-Mac.dmg
+          cp "$(find artifacts -name '*-setup.exe' | head -1)" out/Nematode-Windows-Setup.exe
+          cp "$(find artifacts -name '*-setup.exe.sig' | head -1)" out/win.sig
+          cp "$(find artifacts -name Nematode.app.tar.gz | head -1)" out/Nematode-Mac-update.app.tar.gz
+          cp "$(find artifacts -name Nematode.app.tar.gz.sig | head -1)" out/mac.sig
           cd out
-          ls -la
           base="https://github.com/${{ github.repository }}/releases/download/$TAG"
-          exe=$(ls *-setup.exe | head -1)
-          jq -n --arg v "${TAG#v}" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg base "$base" --arg exe "$exe" \
-            --rawfile mac Nematode.app.tar.gz.sig --rawfile win "$exe.sig" '
+          jq -n --arg v "${TAG#v}" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg base "$base" \
+            --rawfile mac mac.sig --rawfile win win.sig '
             {version: $v, pub_date: $date, platforms: {
-              "darwin-aarch64": {signature: $mac, url: "\($base)/Nematode.app.tar.gz"},
-              "darwin-x86_64":  {signature: $mac, url: "\($base)/Nematode.app.tar.gz"},
-              "windows-x86_64": {signature: $win, url: "\($base)/\($exe)"}
+              "darwin-aarch64": {signature: $mac, url: "\($base)/Nematode-Mac-update.app.tar.gz"},
+              "darwin-x86_64":  {signature: $mac, url: "\($base)/Nematode-Mac-update.app.tar.gz"},
+              "windows-x86_64": {signature: $win, url: "\($base)/Nematode-Windows-Setup.exe"}
             }}' > latest.json
           cat latest.json
-          gh release create "$TAG" --repo "${{ github.repository }}" --title "Nematode $TAG" --generate-notes \
-            Nematode.dmg Nematode.app.tar.gz "$exe" latest.json
+          cat > notes.md <<NOTES
+          ### Download
+
+          - **Mac:** [Nematode-Mac.dmg]($base/Nematode-Mac.dmg)
+          - **Windows:** [Nematode-Windows-Setup.exe]($base/Nematode-Windows-Setup.exe)
+
+          Already installed? It updates itself. The other files below are for those automatic updates.
+          NOTES
+          gh release create "$TAG" --repo "${{ github.repository }}" --title "Nematode $TAG" --notes-file notes.md \
+            Nematode-Mac.dmg Nematode-Windows-Setup.exe Nematode-Mac-update.app.tar.gz latest.json

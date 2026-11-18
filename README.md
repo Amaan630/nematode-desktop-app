@@ -8,8 +8,10 @@ Grab him and throw him around; he'll find his way back.
 
 ## Install
 
-Download from [Releases](https://github.com/Amaan630/nematode-desktop-app/releases/latest):
-`Nematode.dmg` (Mac) or the `-setup.exe` (Windows). On Mac, drag Nematode to Applications, open it, and click
+- **Mac:** [Nematode-Mac.dmg](https://github.com/Amaan630/nematode-desktop-app/releases/latest/download/Nematode-Mac.dmg)
+- **Windows:** [Nematode-Windows-Setup.exe](https://github.com/Amaan630/nematode-desktop-app/releases/latest/download/Nematode-Windows-Setup.exe)
+
+ On Mac, drag Nematode to Applications, open it, and click
 **Allow**. It lives in the menu bar and updates itself: it checks at launch and once a day.
 
 ## Develop
