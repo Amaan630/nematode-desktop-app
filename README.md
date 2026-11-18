@@ -10,6 +10,8 @@
   <a href="https://github.com/Amaan630/nematode-desktop-app/releases/latest/download/Nematode-Mac.dmg"><b>Download for Mac</b></a>
   &nbsp;·&nbsp;
   <a href="https://github.com/Amaan630/nematode-desktop-app/releases/latest/download/Nematode-Windows-Setup.exe"><b>Download for Windows</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://amaan630.github.io/nematode-desktop-app/">Website</a>
 </p>
 
 ---
@@ -43,6 +45,7 @@ The app is built with [Tauri](https://tauri.app), so Mac and Windows share one c
 
 - `src/nematode.js` draws him as a striped tube along a bendable spine, which is how he can walk, squash, stomp and tumble.
 - `src/index.html` is a transparent, click-through overlay across your screen. It only catches the mouse while your cursor is over him.
+- `site/` is the website, published to GitHub Pages by `.github/workflows/pages.yml`.
 - `src-tauri/` is the native app: the menu bar, open at login and updates. It also finds your tab: on Mac through Accessibility (`mac.rs`), on Windows through UI Automation (`win.rs`). Both read Chrome's address bar and the position of the selected tab.
 
 ## Develop
