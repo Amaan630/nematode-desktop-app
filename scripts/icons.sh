@@ -22,3 +22,8 @@ shot tray build/tray-full.png
 sips -Z 64 build/tray-full.png --out src-tauri/icons/tray.png >/dev/null
 npx tauri icon build/icon.png -o src-tauri/icons >/dev/null 2>&1
 rm -rf src-tauri/icons/ios src-tauri/icons/android src-tauri/icons/Square*.png src-tauri/icons/StoreLogo.png
+
+# Install window background (1x + 2x in one .tiff)
+"$CHROME" --headless --hide-scrollbars --force-device-scale-factor=1 --window-size=540,380 --screenshot="$PWD/build/dmg-background.png" "file://$PWD/scripts/dmg-background.html" 2>/dev/null
+"$CHROME" --headless --hide-scrollbars --force-device-scale-factor=2 --window-size=540,380 --screenshot="$PWD/build/dmg-background@2x.png" "file://$PWD/scripts/dmg-background.html" 2>/dev/null
+tiffutil -cathidpicheck build/dmg-background.png build/dmg-background@2x.png -out build/dmg-background.tiff >/dev/null

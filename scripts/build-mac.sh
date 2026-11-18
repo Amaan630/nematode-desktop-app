@@ -35,8 +35,8 @@ rm -f "$TAR" "$TAR.sig"
 COPYFILE_DISABLE=1 tar -czf "$TAR" -C "$OUT/macos" Nematode.app
 npx tauri signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$TAR" >/dev/null
 
-STAGE=$(mktemp -d)
-cp -R "$APP" "$STAGE/" && ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname Nematode -srcfolder "$STAGE" -ov -format UDZO "$OUT/Nematode.dmg" >/dev/null
-rm -rf "$STAGE"
+# Install window layout is written directly by dmgbuild (no Finder scripting, so it works in CI too).
+[ -x build/.venv/bin/dmgbuild ] || { python3 -m venv build/.venv && build/.venv/bin/pip install -q dmgbuild; }
+rm -f "$OUT/Nematode.dmg"
+build/.venv/bin/dmgbuild -s scripts/dmg.py -D app="$APP" Nematode "$OUT/Nematode.dmg" >/dev/null
 echo "$OUT"
