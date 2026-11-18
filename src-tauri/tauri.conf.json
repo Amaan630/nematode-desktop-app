@@ -19,6 +19,7 @@
         "focus": false,
         "focusable": false,
         "acceptFirstMouse": true,
+        "backgroundThrottling": "disabled",
         "resizable": false,
         "shadow": false,
         "visible": false,

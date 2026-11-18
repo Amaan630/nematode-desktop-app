@@ -144,6 +144,12 @@ function fly(dt) {
 }
 
 function frame(now) {
+  try { tick(now); } catch (e) { console.error(e); } // one bad frame must never freeze him
+  if (n.state !== 'gone' || dust.length) requestAnimationFrame(frame);
+  else { running = false; setHover(false); }
+}
+
+function tick(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (n.state === 'walk') {
     // Inchworm-ish gait: a wave ripples up the body and each ripple surges him forward.
@@ -180,8 +186,6 @@ function frame(now) {
   hit = n.state === 'gone' ? null : drawNematode(ctx, pose);
   drawDust(dt);
   pollCursor();
-  if (n.state !== 'gone' || dust.length) requestAnimationFrame(frame);
-  else { running = false; setHover(false); }
 }
 
 // --- Grabbing -------------------------------------------------------------------------------
