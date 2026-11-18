@@ -1,0 +1,15 @@
+{
+  "name": "nematode",
+  "productName": "Nematode",
+  "version": "0.1.1",
+  "description": "A little nematode who stomps on your Claude tab.",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icons": "./scripts/icons.sh",
+    "build:mac": "./scripts/build-mac.sh"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.5"
+  }
+}

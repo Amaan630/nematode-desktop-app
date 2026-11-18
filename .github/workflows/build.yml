@@ -1,0 +1,34 @@
+# Builds the Mac .dmg and the Windows installer. Run it from the Actions tab, or push a tag like v0.1.0.
+name: build
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            args: --target universal-apple-darwin
+          - os: windows-latest
+            args: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - run: npm ci
+      - if: matrix.os == 'macos-latest'
+        run: ./scripts/build-mac.sh ${{ matrix.args }}
+      - if: matrix.os == 'windows-latest'
+        run: npx tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nematode-${{ matrix.os }}
+          path: |
+            src-tauri/target/**/bundle/*.dmg
+            src-tauri/target/**/bundle/nsis/*.exe

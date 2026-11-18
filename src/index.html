@@ -1,0 +1,202 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Nematode</title>
+<style>html, body { margin: 0; background: transparent; overflow: hidden; user-select: none } canvas { display: block }</style>
+<canvas></canvas>
+<script src="nematode.js"></script>
+<script>
+const SIZE = 64;       // px per body length (he's roughly this tall)
+const SPEED = 210;     // walking px/s
+const STEP_HZ = 3.2;   // wiggle cycles per second while walking
+const STOMP = 0.62, STOMPS = 3, REST = 1.4;  // 3 stomps, then a breather
+const G = 2600, BOUNCE = 0.5;                // throw physics: gravity px/s², wall bounciness
+const OFF = -SIZE;     // just past the left edge
+
+const tauri = window.__TAURI__?.core;
+const cv = document.querySelector('canvas'), ctx = cv.getContext('2d');
+let dpr = 1;
+function fit() {
+  dpr = devicePixelRatio;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+fit(); addEventListener('resize', fit);
+
+// n.y is where his feet are. want is where the app says his Claude tab is.
+const n = { x: OFF, y: 0, face: 1, state: 'gone', phase: 0, t: 0, landed: -1, rot: 0, vx: 0, vy: 0, vr: 0, squash: 0 };
+const want = { show: false, x: 0, y: 0 };
+let hit = null, hover = false, drag = null, dust = [], running = false, last = 0, polling = false;
+
+// Called by the app: {show:true, x, y} = go stomp there; {show:false} = leave; {reset:true} = new screen.
+function nema(m) {
+  if (m.reset) Object.assign(n, { x: OFF, state: 'gone' });
+  if (m.show) Object.assign(want, { show: true, x: m.x, y: m.y }); else want.show = false;
+  if (n.state === 'gone') {
+    if (!want.show) return;
+    Object.assign(n, { x: OFF, y: want.y });
+    go();
+  } else if (n.state === 'walk' || n.state === 'stomp') go(); // held/fly/leap check `want` when they finish
+  start();
+}
+function start() { if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); } }
+
+// Pick the next move: walk over, leap up/down to the tab, stomp, or leave.
+function go() {
+  if (want.show && n.state === 'stomp' && Math.abs(want.y - n.y) > 4) return leap();
+  const tx = want.show ? want.x : OFF;
+  if (Math.abs(tx - n.x) > 2) return n.state = 'walk';
+  if (!want.show) return n.state = 'gone';
+  if (Math.abs(want.y - n.y) > 4) return leap();
+  if (n.state !== 'stomp') Object.assign(n, { state: 'stomp', t: 0, landed: -1 });
+}
+function leap() {
+  const dx = want.x - n.x, dy = want.y - n.y;
+  Object.assign(n, { state: 'leap', t: 0, from: [n.x, n.y], to: [want.x, want.y], face: Math.sign(dx) || n.face,
+                     dur: .45 + Math.min(.6, Math.hypot(dx, dy) / 2000), arc: 50 + .25 * Math.abs(dy) });
+}
+
+const ease = k => k * k * (3 - 2 * k);
+function stomp(t) {
+  const tc = t % (STOMP * STOMPS + REST);
+  if (tc >= STOMP * STOMPS) { const b = Math.sin(tc * 4); return { curl: 1 + .05 * b, stretch: 1 + .02 * b }; }
+  const u = (tc % STOMP) / STOMP;
+  if (u < .25) { const k = ease(u / .25); return { stretch: 1 - .16 * k, curl: 1 + .3 * k, mouth: .7 }; }
+  if (u < .55) return { hop: SIZE * .32 * Math.sin(Math.PI * (u - .25) / .3), stretch: 1.08, curl: .88 };
+  const land = Math.floor(t / STOMP);
+  if (land !== n.landed) { n.landed = land; puff(); }
+  const k = (u - .55) / .45, d = Math.exp(-6 * k);
+  return { stretch: 1 - .22 * d * Math.cos(10 * k), curl: 1 + .25 * d, mouth: 1 + .2 * Math.exp(-4 * k) };
+}
+
+function puff(n_ = 10) {
+  for (let i = 0; i < n_; i++) {
+    const s = i % 2 ? 1 : -1;
+    dust.push({ x: n.x + s * SIZE * .15, y: n.y, vx: s * (30 + Math.random() * 70),
+                vy: -(10 + Math.random() * 35), r: 1.5 + Math.random() * 2.5, life: 1 });
+  }
+}
+function drawDust(dt) {
+  dust = dust.filter(d => (d.life -= dt * 2) > 0);
+  ctx.fillStyle = '#b9a35e';
+  for (const d of dust) {
+    d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 80 * dt;
+    ctx.globalAlpha = d.life; ctx.beginPath(); ctx.arc(d.x, d.y, d.r * (2 - d.life), 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Thrown: gravity, spin, bounce off every screen edge, slide to a stop on the floor, stand up, carry on.
+function fly(dt) {
+  const W = innerWidth, H = innerHeight, side = SIZE * .3;
+  n.vy += G * dt; n.x += n.vx * dt; n.y += n.vy * dt; n.rot += n.vr * dt;
+  if (n.x < side || n.x > W - side) {
+    n.x = Math.min(W - side, Math.max(side, n.x)); n.vx *= -BOUNCE; n.vr *= -.6;
+  }
+  if (n.y < SIZE) { n.y = SIZE; n.vy = Math.abs(n.vy) * BOUNCE; }
+  if (n.y >= H) {
+    n.y = H;
+    if (n.vy > 250) {
+      n.squash = Math.min(.3, n.vy / 4000);
+      if (n.vy > 700) puff(6);
+      n.vy *= -BOUNCE * .8; n.vx *= .85;
+    } else n.vy = 0;
+  }
+  if (n.y >= H && n.vy === 0) {  // on the floor: friction, roll upright, then get going
+    n.vx *= Math.exp(-5 * dt); n.vr = 0;
+    n.rot = Math.atan2(Math.sin(n.rot), Math.cos(n.rot)) * Math.exp(-8 * dt);
+    if (Math.abs(n.vx) < 20 && Math.abs(n.rot) < .08) {
+      if ((n.t += dt) > .4) { Object.assign(n, { rot: 0, vx: 0, t: 0 }); go(); }
+    } else n.t = 0;
+  }
+  n.squash *= Math.exp(-10 * dt);
+}
+
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (n.state === 'walk') {
+    // Inchworm-ish gait: a wave ripples up the body and each ripple surges him forward.
+    const tx = want.show ? want.x : OFF, dir = Math.sign(tx - n.x);
+    n.face = dir || n.face;
+    n.phase = (n.phase + dt * STEP_HZ) % 1;
+    n.x += dir * SPEED * dt * (.45 + .85 * Math.max(0, Math.sin(2 * Math.PI * n.phase)));
+    if (!dir || Math.sign(tx - n.x) !== dir) { n.x = tx; go(); }
+  } else if (n.state === 'leap') {
+    const u = Math.min(1, (n.t += dt) / n.dur);
+    n.x = n.from[0] + (n.to[0] - n.from[0]) * u;
+    n.y = n.from[1] + (n.to[1] - n.from[1]) * u - 4 * n.arc * u * (1 - u);
+    if (u === 1) { puff(); n.state = 'landing'; go(); }
+  } else if (n.state === 'stomp') n.t += dt;
+  else if (n.state === 'fly') fly(dt);
+  else if (n.state === 'held') n.phase = (n.phase + dt * 5) % 1;
+
+  const pose = { x: n.x, ground: n.y, scale: SIZE, face: n.face, rot: n.rot };
+  const surge = Math.sin(2 * Math.PI * n.phase);
+  if (n.state === 'walk') Object.assign(pose, { phase: n.phase, wave: .16, curl: 1 - .12 * surge,
+    stretch: 1 + .06 * surge, hop: 3 * Math.max(0, surge), mouth: .8 + .2 * surge });
+  else if (n.state === 'stomp') Object.assign(pose, stomp(n.t));
+  else if (n.state === 'leap') { const u = n.t / n.dur; Object.assign(pose, { stretch: 1.12 - .2 * u, curl: .9, mouth: 1.1 }); }
+  else if (n.state === 'held') Object.assign(pose, { phase: n.phase, wave: .3, curl: 1.15, mouth: 1.2 }); // wriggling
+  else if (n.state === 'fly') Object.assign(pose, { stretch: 1 - n.squash, curl: 1 + n.squash, mouth: 1.15 });
+
+  ctx.clearRect(0, 0, innerWidth, innerHeight);
+  hit = n.state === 'gone' ? null : drawNematode(ctx, pose);
+  drawDust(dt);
+  pollCursor();
+  if (n.state !== 'gone' || dust.length) requestAnimationFrame(frame);
+  else { running = false; setHover(false); }
+}
+
+// --- Grabbing -------------------------------------------------------------------------------
+// The overlay ignores the mouse so clicks reach your apps. While the cursor is over him we take the
+// mouse, so you can grab him.
+function isOver(x, y) {
+  if (!hit) return false;
+  ctx.lineWidth = 14;
+  return ctx.isPointInPath(hit, x * dpr, y * dpr) || ctx.isPointInStroke(hit, x * dpr, y * dpr);
+}
+function setHover(h) {
+  if (h === hover) return;
+  hover = h;
+  cv.style.cursor = h ? 'grab' : '';
+  tauri?.invoke('set_grabbable', { on: h });
+}
+function pollCursor() {
+  if (!tauri || drag || polling || n.state === 'gone') return;
+  polling = true;
+  tauri.invoke('cursor').then(([x, y]) => setHover(isOver(x, y))).finally(() => polling = false);
+}
+
+cv.addEventListener('pointermove', e => {
+  if (!drag) return tauri || setHover(isOver(e.clientX, e.clientY)); // browser preview has no Tauri
+  n.x += e.clientX - drag.x; n.y += e.clientY - drag.y;
+  drag.x = e.clientX; drag.y = e.clientY;
+  drag.hist.push([e.timeStamp, e.clientX, e.clientY]);
+  while (drag.hist.length > 2 && e.timeStamp - drag.hist[0][0] > 80) drag.hist.shift();
+  n.rot += (Math.max(-.6, Math.min(.6, (e.clientX - drag.hist[0][1]) * .01)) - n.rot) * .3; // swing with the drag
+});
+cv.addEventListener('pointerdown', e => {
+  if (!isOver(e.clientX, e.clientY)) return;
+  cv.setPointerCapture(e.pointerId);
+  cv.style.cursor = 'grabbing';
+  drag = { x: e.clientX, y: e.clientY, hist: [[e.timeStamp, e.clientX, e.clientY]] };
+  Object.assign(n, { state: 'held', vx: 0, vy: 0 });
+  start();
+});
+cv.addEventListener('pointerup', e => {
+  if (!drag) return;
+  const [t0, x0, y0] = drag.hist[0], dt = Math.max(.016, (e.timeStamp - t0) / 1000);
+  const clamp = v => Math.max(-4000, Math.min(4000, v));
+  Object.assign(n, { state: 'fly', vx: clamp((e.clientX - x0) / dt), vy: clamp((e.clientY - y0) / dt), t: 0 });
+  n.vr = Math.max(-14, Math.min(14, n.vx * .006));
+  drag = null;
+  cv.style.cursor = 'grab';
+  tauri?.invoke('release'); // hand focus back to Chrome
+});
+
+// Browser preview: index.html?demo
+if (location.search === '?demo') {
+  document.body.style.background = '#dfe3e8';
+  nema({ show: true, x: 520, y: 200 });
+}
+</script>
