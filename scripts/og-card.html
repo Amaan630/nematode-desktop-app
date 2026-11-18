@@ -19,6 +19,12 @@
 <script src="../src/characters/nematode.js"></script>
 <script src="../src/characters/croissant.js"></script>
 <script>
+// Fonts differ by machine (CI's Linux font is wider than macOS's): shrink the text until it fits its column.
+for (const [el, max] of [[document.querySelector('h1'), 560], [document.querySelector('p'), 520]]) {
+  let size = parseFloat(getComputedStyle(el).fontSize);
+  el.style.whiteSpace = el.tagName === 'H1' ? 'nowrap' : '';
+  while (el.scrollWidth > max && size > 20) el.style.fontSize = (size -= 2) + 'px';
+}
 const x = document.querySelector('canvas').getContext('2d'); x.scale(2, 2);
 const idle = { state: 'idle', phase: 0, t: 0, stretch: 1, hop: 0, crouch: 0, impact: 0, airborne: false };
 const at = (px, ground, zoom, face) => ({ x: px, ground, face, rot: 0, accel: [0, 0], dt: 1 / 60, now: 1000, zoom }); // eyes open
