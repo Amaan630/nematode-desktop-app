@@ -95,7 +95,7 @@ To preview in a browser, serve `src/` and open `index.html?demo` (add `&char=cro
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit, then tag it:
 
 ```bash
-git tag v0.3.3 && git push --tags
+git tag v0.3.4 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.
