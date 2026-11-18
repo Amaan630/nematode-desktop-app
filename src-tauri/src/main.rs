@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(windows)]
+mod win;
 
 use std::{sync::Mutex, time::Duration};
 use tauri::{
@@ -70,18 +72,38 @@ fn locate() -> Option<Option<(f64, f64)>> {
         return Some(None);
     }
     let scan = mac::scan(pid);
-    let address = scan.address.unwrap_or_default().to_lowercase();
-    let host = address.trim_start_matches("https://").trim_start_matches("http://").trim_start_matches("www.");
-    if !host.starts_with("claude.ai") {
+    if !on_claude(scan.address) {
         return Some(None);
     }
     scan.tab.map(|(x, y, w, h)| Some((x + w / 2.0, y + h - 2.0))) // stand on the tab's bottom edge
 }
 
-// ponytail: Windows has no tab detection yet; UI Automation (TabItem bounds + address bar) is the upgrade.
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn locate() -> Option<Option<(f64, f64)>> {
+    let (hwnd, pid, exe) = win::foreground();
+    if pid == std::process::id() {
+        return None; // you're holding him: stay put
+    }
+    if exe != "chrome.exe" {
+        return Some(None);
+    }
+    let scan = win::scan(hwnd);
+    if !on_claude(scan.address) {
+        return Some(None);
+    }
+    scan.tab.map(|(x, y, w, h)| Some((x + w / 2.0, y + h - 2.0))) // stand on the tab's bottom edge
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 fn locate() -> Option<Option<(f64, f64)>> {
     None
+}
+
+#[cfg(any(target_os = "macos", windows))]
+fn on_claude(address: Option<String>) -> bool {
+    let address = address.unwrap_or_default().to_lowercase();
+    let host = address.trim_start_matches("https://").trim_start_matches("http://").trim_start_matches("www.");
+    host.starts_with("claude.ai")
 }
 
 fn push(win: &WebviewWindow, spot: Option<(f64, f64)>) {
@@ -143,6 +165,10 @@ fn set_grabbable(app: AppHandle, on: bool) {
             STATE.lock().unwrap().focus_pid = pid; // remember Chrome before a click activates us
         }
     }
+    #[cfg(windows)]
+    if on {
+        win::remember();
+    }
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.set_ignore_cursor_events(!on);
     }
@@ -157,6 +183,8 @@ fn release() {
             mac::activate(pid);
         }
     }
+    #[cfg(windows)]
+    win::restore();
 }
 
 // --- Setup: one permission, shown only while it's missing.

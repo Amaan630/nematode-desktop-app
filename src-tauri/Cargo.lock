@@ -1964,6 +1964,7 @@ dependencies = [
  "objc2",
  "tauri",
  "tauri-build",
+ "windows",
 ]
 
 [[package]]
