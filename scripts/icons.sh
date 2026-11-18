@@ -1,7 +1,6 @@
 #!/bin/sh
 # Renders every icon from the same drawing code the app uses (src/characters/):
-#   - Soft Pink (the default app icon), once per character: it always shows the active character
-#   - the four dithered app icons
+#   - the app icons: Soft Pink (the default, Croissant on the site's pink) and four dithered ones
 #   - each character's Character-menu preview and menu bar icon
 #   - the install-window background and a local copy of the site's link-preview card
 set -e
@@ -21,12 +20,12 @@ app_icon() {
   rm -rf "$ICO"
 }
 
+app_icon "v=soft" soft
 for v in pinkblue acid halftone purple; do app_icon "v=$v" "$v"; done
 
-# Every character in src/characters/: its Soft Pink app icon, menu preview and menu bar icon (trimmed to his outline).
+# Every character in src/characters/: its menu preview and menu bar icon (trimmed to his outline).
 for f in src/characters/*.js; do
   c=$(basename "$f" .js)
-  app_icon "v=soft&on=$c" "soft-$c"
   shot "char=$c" "build/char-$c.png"
   sips -Z 64 "build/char-$c.png" --out "src-tauri/icons/characters/$c-menu.png" >/dev/null
   shot "tray=$c" "build/tray-$c.png"
@@ -35,10 +34,8 @@ for f in src/characters/*.js; do
   sips -Z 64 "build/tray-$c.png" --out "src-tauri/icons/characters/$c-tray.png" >/dev/null
 done
 
-# The default: Soft Pink with Nematode is baked into the app bundle; its preview stands in for "Soft Pink" in the menu
-# (the app swaps it for the active character's at runtime).
-cp build/icon-soft-nematode.png build/icon.png
-cp src-tauri/icons/variants/soft-nematode-menu.png src-tauri/icons/variants/soft-menu.png
+# The default (Soft Pink) is baked into the app bundle.
+cp build/icon-soft.png build/icon.png
 npx tauri icon build/icon.png -o src-tauri/icons >/dev/null 2>&1
 rm -rf src-tauri/icons/ios src-tauri/icons/android src-tauri/icons/Square*.png src-tauri/icons/StoreLogo.png
 

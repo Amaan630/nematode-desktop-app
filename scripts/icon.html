@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- Renders icons for scripts/icons.sh:
-     ?v=soft&on=<id>                    Soft Pink app icon (the default): <id> in full color on the site's pink
+     ?v=soft                            Soft Pink app icon (the default): Croissant in full color on the site's pink
      ?v=pinkblue|acid|halftone|purple   the dithered app icons
      ?char=<id>                         a character's Character-menu preview (square)
      ?tray=<id>                         a character's menu bar icon, trimmed to his outline; its size goes in the title -->
@@ -8,9 +8,9 @@
 <canvas width="1024" height="1024"></canvas>
 <script>
 const CHARACTERS = {};
-const q = new URLSearchParams(location.search), who = q.get('char') || q.get('tray'), on = q.get('on');
-// The app icons are drawn from Nematode; character renders load just that character's file.
-for (const id of new Set(['nematode', who, on].filter(Boolean))) document.write(`<script src="../src/characters/${id}.js"><\/script>`);
+const q = new URLSearchParams(location.search), who = q.get('char') || q.get('tray');
+// The dithered icons are drawn from Nematode, Soft Pink from Croissant; character renders load that character's file.
+for (const id of new Set(['nematode', 'croissant', who].filter(Boolean))) document.write(`<script src="../src/characters/${id}.js"><\/script>`);
 </script>
 <script>
 const out = document.querySelector('canvas'), ctx = out.getContext('2d');
@@ -77,9 +77,9 @@ function trimmed(id) {
 }
 
 const variants = {
-  soft: () => { // flat site pink, the character in full color with even padding
+  soft: () => { // flat site pink, Croissant in full color with even padding
     ctx.fillStyle = '#ffc9d9'; ctx.fillRect(0, 0, 1024, 1024);
-    const t = trimmed(on || 'nematode'), k = 1024 * .56 / Math.max(t.w, t.h);
+    const t = trimmed('croissant'), k = 1024 * .56 / Math.max(t.w, t.h);
     ctx.drawImage(t.img, t.x0, t.y0, t.w, t.h, 512 - t.w * k / 2, 528 - t.h * k / 2, t.w * k, t.h * k);
   },
   pinkblue: () => pixels(dither(source(120), '#2020ff', '#ff6fae'), 0, 0, 1024),

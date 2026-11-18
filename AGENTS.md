@@ -17,7 +17,7 @@ overlay over your screen:
   **Dismiss** him.
 - You can **grab and throw** him: gravity, spin, bounces off screen edges, he stands up and walks back.
 - Two **characters**: Nematode (the original) and Croissant. More will be added (see §6).
-- Five **app icons**. **Soft Pink** is the default and shows the **active character**; the others are fixed.
+- Five **app icons**, all fixed. **Soft Pink** (Croissant on the site pink) is the default; the dithered four show Nematode.
   The **menu bar icon** is the current character.
 - Opens at login, **auto-updates** from GitHub Releases, one-time **Accessibility** permission on macOS.
 
@@ -94,7 +94,7 @@ src-tauri/                    native app (Rust, Tauri v2)
 scripts/
   build-mac.sh                full macOS build: app, Dock plugin, stable re-sign, update package, styled DMG
   icons.sh                    regenerates every icon/preview/background from code
-  icon.html                   renders app icons (?v=, ?v=soft&on=<character>), previews (?char=), menu-bar icons (?tray=)
+  icon.html                   renders app icons (?v=, ?v=soft), previews (?char=), menu-bar icons (?tray=)
   favicon.html                renders the site's fixed favicon.png / apple-touch-icon.png from site/favicon.js
   dmg-background.html, dmg.py install-window background and layout (dmgbuild)
   og-card.html                the site's 1200x630 link-preview card (rendered in CI on every deploy)
@@ -184,10 +184,9 @@ and stores the choice in a file named `<key>` in the app data dir (`~/Library/Ap
 **Characters (`characters.rs`)**: `apply()` stores the choice, renames Summon/Dismiss, sets the **tray/menu-bar icon**
 to `<id>-tray.png`, and tells the overlay. The tray icon is the character's on **both** platforms.
 
-**App icons (`icons.rs`)**: re-applied at every launch (updates reset the bundle) and whenever the character
-changes (`characters::apply` calls `icons::apply`). **Soft Pink** (`soft`, first = default) resolves to the artwork
-`soft-<active character>` (from the `characters!` macro in `characters.rs`); its menu preview is swapped to the
-active character too. The bundle's own icon is `soft-nematode` (`BUNDLED`); anything else is applied on top.
+**App icons (`icons.rs`)**: re-applied at every launch (updates reset the bundle). Icons don't depend on the
+character. **Soft Pink** (`soft`, first row = default) always shows Croissant and is the bundle's own icon; anything
+else is applied on top.
 - macOS: `NSWorkspace setIcon` on the bundle (Finder/Launchpad) — verified that the signature still validates
   (non-strict) and Accessibility stays granted; plus the **Dock tile plugin**: the app writes `icon` to its
   preferences (`com.nematode.app`) and posts `com.nematode.app.iconChanged`; the plugin (loaded by the Dock, see
@@ -235,6 +234,7 @@ into `Contents/PlugIns` with the icon PNGs → re-sign with the stable requireme
 (venv in `build/.venv`, layout in `scripts/dmg.py`: 540×380, app left, Applications right, hand-drawn pink arrow).
 
 ### Release (only when asked)
+The release build is tuned for size in `Cargo.toml` (`[profile.release]`: strip, LTO, `opt-level = "s"`); keep it.
 1. Bump the version in **three places**: `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`
    (Cargo.lock updates on build). Also bump the example tag in README's Release section.
 2. Commit, `git push`, `git tag vX.Y.Z && git push origin vX.Y.Z`.
@@ -276,8 +276,8 @@ Update signing key: `~/.tauri/nematode.key` (+ `.pub`, embedded in `tauri.conf.j
    cel style. Support `at.zoom`. Return an outline `Path2D`.
 2. Load it in `src/index.html` and `site/index.html` (+ a toggle button there), and in `scripts/og-card.html` if it
    should appear on the card.
-3. `npm run icons` — renders `<id>-menu.png`, `<id>-tray.png` and the Soft Pink icon `soft-<id>.*` automatically.
-4. One row in `characters![...]` in `src-tauri/src/characters.rs` (that row also pulls in its Soft Pink artwork).
+3. `npm run icons` — renders `<id>-menu.png` and `<id>-tray.png` automatically.
+4. One row in `characters![...]` in `src-tauri/src/characters.rs`.
 5. Test in the browser harness (§7) through every state, then build/install.
 6. Update README (features, character list, icons row), the site copy (toggle, "Pick who and how"), and this file.
    The favicon, fixed site icons and preview card update themselves.

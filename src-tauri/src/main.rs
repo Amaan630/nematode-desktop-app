@@ -39,8 +39,8 @@ fn main() {
             autostart::default_on(app.handle());
             menu::build(app)?;
             // Re-apply saved choices (updates replace the app, and its icon, with the defaults).
-            // The character goes first; applying it also applies the app icon, which can show the character.
             characters::apply(app.handle(), characters::PICKER.saved(app.handle()));
+            icons::apply(app.handle(), icons::PICKER.saved(app.handle()));
             setup::show_if_needed(app.handle());
             update::spawn(app.handle().clone());
             presence::spawn(overlay);
