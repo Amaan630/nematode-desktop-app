@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- The site's fixed icons, from the same code as its live favicon (site/favicon.js):
+     ?size=64 (favicon.png) or ?size=180&square (apple-touch-icon.png; iOS rounds the corners itself).
+     Rendered on every site deploy by .github/workflows/pages.yml. -->
+<meta charset="utf-8">
+<style>html, body { margin: 0; background: transparent } canvas { display: block }</style>
+<body>
+<script>const CHARACTERS = {};</script>
+<script src="../src/characters/nematode.js"></script>
+<script src="../site/favicon.js"></script>
+<script>
+const q = new URLSearchParams(location.search), size = +q.get('size') || 64;
+document.body.appendChild(faviconCanvas('nematode', size, !q.has('square')));
+</script>

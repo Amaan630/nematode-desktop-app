@@ -72,6 +72,14 @@ impl Picker {
         }
     }
 
+    /// Swaps one option's preview image (e.g. Soft Pink shows the active character).
+    pub fn set_preview(&self, id: &str, png: &[u8]) {
+        let Some(i) = self.choices.iter().position(|c| c.id == id) else { return };
+        if let (Some(item), Ok(img)) = (self.items.get().and_then(|v| v.get(i)), Image::from_bytes(png)) {
+            let _ = item.set_icon(Some(img));
+        }
+    }
+
     pub fn default(&self) -> &'static Choice {
         &self.choices[0]
     }

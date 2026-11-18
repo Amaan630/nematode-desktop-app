@@ -1,15 +1,16 @@
 <!doctype html>
 <!-- Renders icons for scripts/icons.sh:
-     ?v=pinkblue|acid|halftone|purple   app icons
+     ?v=soft&on=<id>                    Soft Pink app icon (the default): <id> in full color on the site's pink
+     ?v=pinkblue|acid|halftone|purple   the dithered app icons
      ?char=<id>                         a character's Character-menu preview (square)
      ?tray=<id>                         a character's menu bar icon, trimmed to his outline; its size goes in the title -->
 <style>html, body { margin: 0; background: transparent }</style>
 <canvas width="1024" height="1024"></canvas>
 <script>
 const CHARACTERS = {};
-const q = new URLSearchParams(location.search), who = q.get('char') || q.get('tray');
+const q = new URLSearchParams(location.search), who = q.get('char') || q.get('tray'), on = q.get('on');
 // The app icons are drawn from Nematode; character renders load just that character's file.
-for (const id of new Set(['nematode', who].filter(Boolean))) document.write(`<script src="../src/characters/${id}.js"><\/script>`);
+for (const id of new Set(['nematode', who, on].filter(Boolean))) document.write(`<script src="../src/characters/${id}.js"><\/script>`);
 </script>
 <script>
 const out = document.querySelector('canvas'), ctx = out.getContext('2d');
@@ -61,7 +62,26 @@ function pixels(img, x, y, size) {
   ctx.drawImage(t, x, y, size, size);
 }
 
+// Any character, standing, drawn big through its own overlay adapter and trimmed to its outline.
+function trimmed(id) {
+  const big = document.createElement('canvas'); big.width = big.height = 2048;
+  const b = big.getContext('2d');
+  CHARACTERS[id].draw(b, { x: 1024, ground: 1600, face: 1, rot: 0, accel: [0, 0], dt: 1 / 60, now: 1000, zoom: 12 },
+    { state: 'idle', phase: 0, t: 0, stretch: 1, hop: 0, crouch: 0, impact: 0, airborne: false });
+  const d = b.getImageData(0, 0, 2048, 2048).data;
+  let x0 = 2048, y0 = 2048, x1 = 0, y1 = 0;
+  for (let y = 0; y < 2048; y++) for (let x = 0; x < 2048; x++) {
+    if (d[(y * 2048 + x) * 4 + 3] > 60) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  }
+  return { img: big, x0, y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
 const variants = {
+  soft: () => { // flat site pink, the character in full color with even padding
+    ctx.fillStyle = '#ffc9d9'; ctx.fillRect(0, 0, 1024, 1024);
+    const t = trimmed(on || 'nematode'), k = 1024 * .56 / Math.max(t.w, t.h);
+    ctx.drawImage(t.img, t.x0, t.y0, t.w, t.h, 512 - t.w * k / 2, 528 - t.h * k / 2, t.w * k, t.h * k);
+  },
   pinkblue: () => pixels(dither(source(120), '#2020ff', '#ff6fae'), 0, 0, 1024),
   acid: () => pixels(dither(source(120), '#101010', '#e9ff3b'), 0, 0, 1024),
   halftone: () => { // light dots on a solid red field, dot size follows brightness
@@ -76,19 +96,10 @@ const variants = {
   purple: () => pixels(dither(source(120), '#3b0a6b', '#ff9a2e'), 0, 0, 1024),
 };
 
-// Any character, standing, drawn big through its own overlay adapter, then trimmed to its outline and fit
-// into the frame: square for the menu preview, as wide or tall as it is for the menu bar icon.
+// Character renders fit into the frame: square for the menu preview, as wide or tall as it is for the menu bar icon.
 function renderCharacter(id, square) {
-  const big = document.createElement('canvas'); big.width = big.height = 2048;
-  const b = big.getContext('2d');
-  CHARACTERS[id].draw(b, { x: 1024, ground: 1600, face: 1, rot: 0, accel: [0, 0], dt: 1 / 60, now: 0, zoom: 12 },
-    { state: 'idle', phase: 0, t: 0, stretch: 1, hop: 0, crouch: 0, impact: 0, airborne: false });
-  const d = b.getImageData(0, 0, 2048, 2048).data;
-  let x0 = 2048, y0 = 2048, x1 = 0, y1 = 0;
-  for (let y = 0; y < 2048; y++) for (let x = 0; x < 2048; x++) {
-    if (d[(y * 2048 + x) * 4 + 3] > 60) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-  }
-  const w = x1 - x0 + 1, h = y1 - y0 + 1, room = square ? 960 : 1024, k = room / Math.max(w, h);
+  const { img: big, x0, y0, w, h } = trimmed(id);
+  const room = square ? 960 : 1024, k = room / Math.max(w, h);
   ctx.drawImage(big, x0, y0, w, h, 512 - w * k / 2, 512 - h * k / 2, w * k, h * k);
   document.title = `${Math.round(w * k)} ${Math.round(h * k)}`; // icons.sh crops the menu bar icon to this
 }

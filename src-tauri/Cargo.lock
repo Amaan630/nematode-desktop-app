@@ -2098,7 +2098,7 @@ dependencies = [
 
 [[package]]
 name = "nematode"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "core-foundation 0.10.1",
  "objc2",

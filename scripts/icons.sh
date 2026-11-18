@@ -1,27 +1,32 @@
 #!/bin/sh
 # Renders every icon from the same drawing code the app uses (src/characters/):
-# the four switchable app icons (Pink & Blue is the default bundle icon) and the menu bar icon.
+#   - Soft Pink (the default app icon), once per character: it always shows the active character
+#   - the four dithered app icons
+#   - each character's Character-menu preview and menu bar icon
+#   - the install-window background and a local copy of the site's link-preview card
 set -e
 cd "$(dirname "$0")/.."
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 shot() { "$CHROME" --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
   --default-background-color=00000000 --window-size=1024,1024 --screenshot="$2" "file://$PWD/scripts/icon.html?$1" 2>/dev/null; }
-mkdir -p build src-tauri/icons/variants
+mkdir -p build src-tauri/icons/variants src-tauri/icons/characters
 
-for v in pinkblue acid halftone purple; do
-  shot "v=$v" "build/icon-$v.png"
-  sips -Z 512 "build/icon-$v.png" --out "src-tauri/icons/variants/$v.png" >/dev/null   # applied as the app icon
-  sips -Z 64 "build/icon-$v.png" --out "src-tauri/icons/variants/$v-menu.png" >/dev/null # menu preview (shown at 18pt)
-  ICO=$(mktemp -d)                                                                         # Windows shortcuts use .ico
-  npx tauri icon "build/icon-$v.png" -o "$ICO" >/dev/null 2>&1 && cp "$ICO/icon.ico" "src-tauri/icons/variants/$v.ico"
+# One app icon: build/icon-<name>.png (1024) -> variants/<name>.png (applied), -menu.png (18pt preview), .ico (Windows).
+app_icon() {
+  shot "$1" "build/icon-$2.png"
+  sips -Z 512 "build/icon-$2.png" --out "src-tauri/icons/variants/$2.png" >/dev/null
+  sips -Z 64 "build/icon-$2.png" --out "src-tauri/icons/variants/$2-menu.png" >/dev/null
+  ICO=$(mktemp -d)
+  npx tauri icon "build/icon-$2.png" -o "$ICO" >/dev/null 2>&1 && cp "$ICO/icon.ico" "src-tauri/icons/variants/$2.ico"
   rm -rf "$ICO"
-done
-cp build/icon-pinkblue.png build/icon.png
+}
 
-# Every character in src/characters/: its Character-menu preview and its menu bar icon (trimmed to his outline).
-mkdir -p src-tauri/icons/characters
+for v in pinkblue acid halftone purple; do app_icon "v=$v" "$v"; done
+
+# Every character in src/characters/: its Soft Pink app icon, menu preview and menu bar icon (trimmed to his outline).
 for f in src/characters/*.js; do
   c=$(basename "$f" .js)
+  app_icon "v=soft&on=$c" "soft-$c"
   shot "char=$c" "build/char-$c.png"
   sips -Z 64 "build/char-$c.png" --out "src-tauri/icons/characters/$c-menu.png" >/dev/null
   shot "tray=$c" "build/tray-$c.png"
@@ -29,6 +34,11 @@ for f in src/characters/*.js; do
   sips -c "${size#* }" "${size% *}" "build/tray-$c.png" --out "build/tray-$c.png" >/dev/null  # height width
   sips -Z 64 "build/tray-$c.png" --out "src-tauri/icons/characters/$c-tray.png" >/dev/null
 done
+
+# The default: Soft Pink with Nematode is baked into the app bundle; its preview stands in for "Soft Pink" in the menu
+# (the app swaps it for the active character's at runtime).
+cp build/icon-soft-nematode.png build/icon.png
+cp src-tauri/icons/variants/soft-nematode-menu.png src-tauri/icons/variants/soft-menu.png
 npx tauri icon build/icon.png -o src-tauri/icons >/dev/null 2>&1
 rm -rf src-tauri/icons/ios src-tauri/icons/android src-tauri/icons/Square*.png src-tauri/icons/StoreLogo.png
 

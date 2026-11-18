@@ -1,7 +1,8 @@
 // Nematode, drawn as a banded tube along a curved spine so he can bend, squash and wiggle.
 // pose: { x, ground, scale (px per body length), face (1 right, -1 left),
 //         phase, wave, curl, stretch, hop, mouth, rot (radians) }
-const NEMA_COLORS = { light: '#a99b63', dark: '#86732c', line: '#efd99b', mouth: '#4a4519' };
+const NEMA_COLORS = { light: '#a99b63', dark: '#86732c', line: '#efd99b', mouth: '#4a4519',
+                      shade: 'rgba(60, 48, 0, .3)' }; // cel shadow (flat, no shine)
 const NEMA_BANDS = [[0, .16, 'light'], [.16, .3, 'dark'], [.3, .42, 'light'], [.42, .54, 'dark'],
                     [.54, .87, 'light'], [.87, .89, 'dark'], [.89, .905, 'light'], [.905, .925, 'dark'], [.925, 1, 'light']];
 const nemaEase = (a, b, s) => { const k = Math.min(1, Math.max(0, (s - a) / (b - a))); return k * k * (3 - 2 * k); };
@@ -69,6 +70,16 @@ function drawNematode(ctx, p) {
   path(body); ctx.strokeStyle = C.line; ctx.lineWidth = Math.max(3, 0.05 * S); ctx.stroke();
   ctx.fillStyle = C.dark; ctx.fill();
   for (const [s0, s1, c] of NEMA_BANDS) { path(band(s0, s1)); ctx.fillStyle = C[c]; ctx.fill(); }
+
+  // Cel shading: one flat, hard-edged shadow band down his back side that darkens every stripe evenly.
+  // No highlights or shine.
+  // The band runs past both ends; clipping to his outline rounds it off with his head and tail.
+  const ext = (i, d, v) => [off(i, v)[0] + T[i][0] * d, off(i, v)[1] + T[i][1] * d];
+  const outer = [ext(0, -W[0], -W[0]), ...pts.map((_, i) => off(i, -W[i])), ext(N, W[N], -W[N])];
+  const inner = [ext(0, -W[0], -W[0] * .2), ...pts.map((_, i) => off(i, -W[i] * .2)), ext(N, W[N], -W[N] * .2)];
+  ctx.save(); path(body); ctx.clip();
+  path([...outer, ...inner.reverse()]); ctx.fillStyle = C.shade; ctx.fill();
+  ctx.restore();
 
   // Mouth: a big squarish dark opening tucked right under the lip (superellipse in spine space).
   const open = Math.min(1.2, p.mouth ?? 1), mouth = [];

@@ -22,10 +22,13 @@
 - **Comes when called.** Choose **Summon** from the menu bar and he hangs out above your Dock, wandering around and sometimes running from your cursor. **Dismiss** sends him away.
 - **Can be thrown.** Grab him and fling him around. He tumbles, bounces off the edges of your screen, picks himself up and walks back.
 - **Two characters.** Nematode or Croissant, under **Character** in the menu bar. The menu bar icon follows your pick. Croissant waddles, and his ends jiggle when you fling him.
-- **Four app icons.** Choose one under **App Icon**: Pink & Blue, Acid, Halftone or Purple.
+- **Five app icons.** Choose one under **App Icon**. **Soft Pink** (the default) shows whichever character is out; the
+  others are Pink & Blue, Acid, Halftone and Purple.
 - **Stays out of the way.** He lives in the menu bar, opens at login and updates himself.
 
 <p align="center">
+  <img src="build/icon-soft-nematode.png" width="96" alt="Soft Pink icon with Nematode">
+  <img src="build/icon-soft-croissant.png" width="96" alt="Soft Pink icon with Croissant">
   <img src="build/icon-pinkblue.png" width="96" alt="Pink & Blue icon">
   <img src="build/icon-acid.png" width="96" alt="Acid icon">
   <img src="build/icon-halftone.png" width="96" alt="Halftone icon">
@@ -60,7 +63,7 @@ src-tauri/src/
   characters.rs icons.rs autostart.rs grab.rs screen.rs setup.rs store.rs update.rs
   docktile/             macOS Dock tile plugin, so the Dock follows the chosen icon
 scripts/                build, icon and install-window rendering
-site/                   the website, published by .github/workflows/pages.yml
+site/                   the website and its favicon code, published by .github/workflows/pages.yml
 ```
 
 `overlay.js` never draws anything itself. Each frame it describes the moment (walking, stomping, flying, how squashed,
@@ -71,12 +74,12 @@ how high) and hands that to the current character, which draws it its own way.
 1. Create `src/characters/<id>.js`: a drawing function, plus a `CHARACTERS.<id>` entry with `name`, `width`, `height`,
    `dust`, `gait` and `draw(ctx, at, motion)`. The contract is at the top of `src/overlay.js`; `croissant.js` is a
    short example.
-2. Load it in `src/index.html`.
-3. Run `npm run icons`. It finds every file in `src/characters/` and renders each one's menu preview and menu bar
-   icon (trimmed to its outline) through its own `draw`.
+2. Load it in `src/index.html` and `site/index.html` (plus a button in the site's character toggle).
+3. Run `npm run icons`. It finds every file in `src/characters/` and renders each one's menu preview, menu bar icon
+   and Soft Pink app icon through its own `draw`. The site's favicon and preview card pick it up automatically too.
 4. Add one row to `src-tauri/src/characters.rs`.
 
-App icons work the same way: one row in `src-tauri/src/icons.rs` and one entry in `scripts/icon.html` and
+A fixed app icon works the same way: one row in `src-tauri/src/icons.rs` and one entry in `scripts/icon.html` and
 `scripts/icons.sh`.
 
 ## Develop
@@ -99,7 +102,7 @@ To preview in a browser, serve `src/` and open `index.html?demo` (add `&char=cro
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit, then tag it:
 
 ```bash
-git tag v0.3.4 && git push --tags
+git tag v0.3.5 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.

@@ -13,7 +13,8 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="icons/icon-pinkblue.png">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   :root { --pink: #ffc9d9; --berry: #9c2552; --cream: #fff7ec; --ink: #4a1f2e; --muted: #8b6b72 }
   * { box-sizing: border-box }
@@ -72,7 +73,7 @@
   <div class="strip">
     <div><h2>Finds your tab</h2><p>Open Claude in Chrome and he walks over and stomps on it, tabs on top or down the side.</p></div>
     <div><h2>Throw him around</h2><p>Grab him, fling him, watch him bounce off your screen and stroll back.</p></div>
-    <div><h2>Pick who and how</h2><p>Nematode or Croissant, four app icons. Lives in your menu bar and updates himself.</p></div>
+    <div><h2>Pick who and how</h2><p>Nematode or Croissant, five app icons. Lives in your menu bar and updates himself.</p></div>
   </div>
   <div class="install" id="install">
     <h2>Installing</h2>
@@ -80,15 +81,16 @@
     <p><b>Windows:</b> run the installer. If SmartScreen appears, click <b>More info → Run anyway</b>.</p>
   </div>
   <div class="looks">
-    <img src="icons/icon-pinkblue.png" alt="Pink & Blue icon"><img src="icons/icon-acid.png" alt="Acid icon"><img src="icons/icon-halftone.png" alt="Halftone icon"><img src="icons/icon-purple.png" alt="Purple icon">
-    <p>Four app icons. Switch from the menu bar.</p>
+    <img src="icons/icon-soft-nematode.png" alt="Soft Pink icon"><img src="icons/icon-pinkblue.png" alt="Pink & Blue icon"><img src="icons/icon-acid.png" alt="Acid icon"><img src="icons/icon-halftone.png" alt="Halftone icon"><img src="icons/icon-purple.png" alt="Purple icon">
+    <p>Five app icons. Soft Pink shows whoever's out. Switch from the menu bar.</p>
   </div>
 </main>
-<footer>Made with Claude · <a href="https://github.com/Amaan630/nematode-desktop-app">GitHub</a></footer>
+<footer><a href="https://github.com/Amaan630/nematode-desktop-app">GitHub</a></footer>
 
 <script>const CHARACTERS = {};</script>
 <script src="characters/nematode.js"></script>
 <script src="characters/croissant.js"></script>
+<script src="favicon.js"></script>
 <script>
 // --- Download: the right file for your computer; phones get a way to send the page to one ------
 const REPO = 'Amaan630/nematode-desktop-app', LATEST = `https://github.com/${REPO}/releases/latest/download/`;
@@ -143,9 +145,13 @@ function choose(id) {
   who = id;
   try { localStorage.who = id; } catch {}
   toggles.forEach(b => b.setAttribute('aria-pressed', b.dataset.who === id));
+  setFavicon(id);
   t0 = performance.now(); prev = null; // the new one walks in from the start
 }
 toggles.forEach(b => b.onclick = () => choose(b.dataset.who));
+
+// The tab icon follows the toggle (drawn by site/favicon.js; the fixed favicon.png is rendered from the same code).
+function setFavicon(id) { document.querySelector('link[rel=icon]').href = faviconCanvas(id).toDataURL(); }
 
 // --- He walks in from the left, hops onto the button and stomps on it --------------------------
 // Same characters and drawing as the app (src/characters/*.js), fed the same kind of `motion`.

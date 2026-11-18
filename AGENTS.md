@@ -17,7 +17,8 @@ overlay over your screen:
   **Dismiss** him.
 - You can **grab and throw** him: gravity, spin, bounces off screen edges, he stands up and walks back.
 - Two **characters**: Nematode (the original) and Croissant. More will be added (see §6).
-- Four **app icons** to pick from. The **menu bar icon** is the current character.
+- Five **app icons**. **Soft Pink** is the default and shows the **active character**; the others are fixed.
+  The **menu bar icon** is the current character.
 - Opens at login, **auto-updates** from GitHub Releases, one-time **Accessibility** permission on macOS.
 
 Repo: <https://github.com/Amaan630/nematode-desktop-app> (public). Site: <https://amaan630.github.io/nematode-desktop-app/>.
@@ -44,10 +45,15 @@ These came from direct feedback. Breaking them has cost real time before.
 - Never do anything invasive to the user's system: e.g. **never restart the Dock** (`killall Dock` un-minimizes all
   windows — this was tried and rejected). Find the proper API instead (see the Dock tile plugin).
 - Characters are **flat 2D cel-shaded** (solid fills, one hard shadow, bold outline). No soft 3D shading, no crumbs,
-  no gradients on characters.
+  no gradients on characters. **Nematode has no shine** (only a flat shadow band down his back; highlights were
+  rejected as too glossy). **Croissant keeps his small glint strokes.**
+- Icon/tile backgrounds are **flat colors, never gradients**. The soft pink everywhere is the site's `#ffc9d9`;
+  dark pink is `#c2185b`.
 - Croissant: **waddle walk with straight stubby legs** (the jointed-knee walk was rejected). **Jiggle only from real
   movement** — holding him still must not move him; legs stay still while held; jiggle moderate, not floppy.
-- Website: **pink + cream**, no dither on the site characters (rejected), characters drawn in their real colors.
+- Website: **pink + cream** (`#ffc9d9` / `#fff7ec`, berry `#9c2552` text). No dither anywhere on the site (tried twice,
+  rejected both times), characters drawn in their real colors. Favicon = the toggled character's **silhouette**, dark
+  pink on light pink, padded evenly. No "Made with Claude" or any AI credit on the site.
 - Phones/tablets never get download links (the app can't run there).
 
 ---
@@ -60,6 +66,8 @@ src/                          web code, bundled into the app (Tauri frontendDist
   overlay.js                  behavior engine (never draws). Contract for characters at the top.
   characters/nematode.js      drawNematode() + CHARACTERS.nematode adapter
   characters/croissant.js     drawCroissant() + CroissantJiggle + CHARACTERS.croissant adapter
+                              (drawNematode/drawCroissant are THE central drawings: overlay, icons, menu-bar icons,
+                              previews, site, favicon and preview card all draw through them)
   setup.html                  one-time Accessibility window (macOS)
 src-tauri/                    native app (Rust, Tauri v2)
   src/main.rs                 startup wiring only
@@ -80,15 +88,18 @@ src-tauri/                    native app (Rust, Tauri v2)
   docktile/                   macOS Dock tile plugin (Swift) so the pinned Dock icon follows the chosen icon
   Info.plist                  merged into the app's Info.plist (registers the Dock tile plugin)
   icons/                      generated icons (do not hand-edit; see §8)
-    variants/<id>.png|-menu.png|.ico   app icon choices
+    variants/<id>.png|-menu.png|.ico   fixed app icons; soft-<character>.* = Soft Pink per character;
+                                       soft-menu.png = Soft Pink's preview before the app swaps in the active one
     characters/<id>-menu.png|-tray.png per-character menu preview and menu-bar icon
 scripts/
   build-mac.sh                full macOS build: app, Dock plugin, stable re-sign, update package, styled DMG
   icons.sh                    regenerates every icon/preview/background from code
-  icon.html                   renders app icons (?v=), character previews (?char=), menu-bar icons (?tray=)
+  icon.html                   renders app icons (?v=, ?v=soft&on=<character>), previews (?char=), menu-bar icons (?tray=)
+  favicon.html                renders the site's fixed favicon.png / apple-touch-icon.png from site/favicon.js
   dmg-background.html, dmg.py install-window background and layout (dmgbuild)
   og-card.html                the site's 1200x630 link-preview card (rendered in CI on every deploy)
 site/index.html               the website (GitHub Pages)
+site/favicon.js               the site's silhouette favicon (live, follows the toggle; also used for the fixed icons)
 build/                        committed renders used by README/site (icon*.png, dmg-background.tiff); rest ignored
 .github/workflows/build.yml   builds Mac + Windows; on a v* tag also publishes the Release + latest.json
 .github/workflows/pages.yml   publishes the site (copies characters + icons, renders og.png)
@@ -127,6 +138,7 @@ Each character file is self-contained: a pure drawing function (`drawNematode(ct
 
 Character notes:
 - **Nematode**: a banded tube along a bendable spine; inchworm gait (surging pace); curls on crouch/impact.
+  Cel shading = one flat translucent shadow band down his back side, clipped to his outline. No highlights.
 - **Croissant**: seven cel-shaded layers on a crescent, straight stubby legs, waddle (one boot lifts at a time,
   body rocks); `CroissantJiggle` is a spring on each end driven *only* by the body's on-screen acceleration
   (gain 0.22, clamp ±0.45 rad, k 260, damping 12). Legs don't move while held.
@@ -172,7 +184,10 @@ and stores the choice in a file named `<key>` in the app data dir (`~/Library/Ap
 **Characters (`characters.rs`)**: `apply()` stores the choice, renames Summon/Dismiss, sets the **tray/menu-bar icon**
 to `<id>-tray.png`, and tells the overlay. The tray icon is the character's on **both** platforms.
 
-**App icons (`icons.rs`)**: re-applied at every launch (updates reset the bundle).
+**App icons (`icons.rs`)**: re-applied at every launch (updates reset the bundle) and whenever the character
+changes (`characters::apply` calls `icons::apply`). **Soft Pink** (`soft`, first = default) resolves to the artwork
+`soft-<active character>` (from the `characters!` macro in `characters.rs`); its menu preview is swapped to the
+active character too. The bundle's own icon is `soft-nematode` (`BUNDLED`); anything else is applied on top.
 - macOS: `NSWorkspace setIcon` on the bundle (Finder/Launchpad) — verified that the signature still validates
   (non-strict) and Accessibility stays granted; plus the **Dock tile plugin**: the app writes `icon` to its
   preferences (`com.nematode.app`) and posts `com.nematode.app.iconChanged`; the plugin (loaded by the Dock, see
@@ -241,10 +256,15 @@ Update signing key: `~/.tauri/nematode.key` (+ `.pub`, embedded in `tauri.conf.j
   API. A **character toggle** (Nematode/Croissant, remembered in localStorage) picks who walks in, hops onto the
   button and stomps — drawn by the same `src/characters/*.js` adapters with the same `motion` shape.
   Reduced motion: he just stands on the button.
-- `pages.yml` deploys on changes to the site, characters, icons or the card: copies `site/index.html`,
-  `src/characters/*.js` → `characters/`, `build/icon-*.png` + `src-tauri/icons/characters/*-menu.png` → `icons/`,
-  and **renders `og.png` from `scripts/og-card.html` with headless Chrome every deploy**, so link previews always show
-  the current characters. The card auto-shrinks text to fit (CI's Linux font is wider than macOS's).
+- `pages.yml` deploys on changes to the site, characters, icons, the card or the favicon page: copies
+  `site/index.html` + `site/favicon.js`, `src/characters/*.js` → `characters/`, `build/icon-*.png` +
+  `src-tauri/icons/characters/*-menu.png` → `icons/`, and **renders with headless Chrome on every deploy**:
+  `og.png` (from `scripts/og-card.html`), `favicon.png` (64) and `apple-touch-icon.png` (180, square) (from
+  `scripts/favicon.html`). So previews, search results and home-screen icons always show the current characters.
+  The card auto-shrinks text to fit (CI's Linux font is wider than macOS's).
+- The page's live favicon is drawn by `site/favicon.js` from the toggled character; the `<link rel="icon">` points at
+  the CI-rendered `favicon.png` for crawlers and no-JS. A page script that appends to `document.body` must come after
+  `<body>` (a blank favicon render was caused by this once).
 - Link previews are cached by Slack/iMessage etc.; a new image can take a while to show there.
 
 ---
@@ -256,13 +276,15 @@ Update signing key: `~/.tauri/nematode.key` (+ `.pub`, embedded in `tauri.conf.j
    cel style. Support `at.zoom`. Return an outline `Path2D`.
 2. Load it in `src/index.html` and `site/index.html` (+ a toggle button there), and in `scripts/og-card.html` if it
    should appear on the card.
-3. `npm run icons` — renders `<id>-menu.png` and `<id>-tray.png` automatically (trimmed to its outline).
-4. One row in `characters![...]` in `src-tauri/src/characters.rs`.
+3. `npm run icons` — renders `<id>-menu.png`, `<id>-tray.png` and the Soft Pink icon `soft-<id>.*` automatically.
+4. One row in `characters![...]` in `src-tauri/src/characters.rs` (that row also pulls in its Soft Pink artwork).
 5. Test in the browser harness (§7) through every state, then build/install.
-6. Update README (features + character list), the site copy, and this file.
+6. Update README (features, character list, icons row), the site copy (toggle, "Pick who and how"), and this file.
+   The favicon, fixed site icons and preview card update themselves.
 
-**Add an app icon**: add `?v=<id>` to `variants` in `scripts/icon.html`, `<id>` to the loop in `scripts/icons.sh`,
-`npm run icons`, one row in `icons![...]` in `src-tauri/src/icons.rs`; README + site "looks" row.
+**Add a fixed app icon**: add `?v=<id>` to `variants` in `scripts/icon.html`, `<id>` to the loop in `scripts/icons.sh`,
+`npm run icons`, one row in `icons![...]` in `src-tauri/src/icons.rs`; README + site "looks" row (and the count in
+their copy: "Five app icons").
 
 **Change anything visible**: render it and show the owner first; check light/dark where relevant, real sizes,
 small sizes (64/32 px for icons, 18 pt for menu items), phone width for the site.
@@ -305,6 +327,8 @@ character" sections describe the architecture for humans.
 - `sips -c` crops around the center; trimming is done in `icon.html` instead and the size is read from the page title.
 - Headless Chrome on CI (Linux) has different fonts → fit text in code, don't hard-code sizes for one font.
 - Overlapping edit scripts once deleted `locate()`; after large edits always diff and `cargo check`.
+- Changing a central drawing (`drawNematode`/`drawCroissant`) changes every icon: run `npm run icons` and look at all
+  of them (dithered icons, Soft Pink, previews, menu-bar icons) before committing.
 
 ---
 
