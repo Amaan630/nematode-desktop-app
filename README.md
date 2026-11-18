@@ -19,9 +19,10 @@
 ## What he does
 
 - **Finds your Claude tab.** Switch to claude.ai in Chrome and he walks in from the left and stomps on that exact tab, whether your tabs run along the top or down the side.
-- **Comes when called.** Choose **Summon Nematode** from the menu bar and he hangs out above your Dock, wandering around and sometimes running from your cursor. **Dismiss** sends him away.
+- **Comes when called.** Choose **Summon** from the menu bar and he hangs out above your Dock, wandering around and sometimes running from your cursor. **Dismiss** sends him away.
 - **Can be thrown.** Grab him and fling him around. He tumbles, bounces off the edges of your screen, picks himself up and walks back.
-- **Has four looks.** Choose one under **App Icon** in the menu bar: Pink & Blue, Acid, Halftone or Purple.
+- **Two characters.** Nematode or Croissant, under **Character** in the menu bar. The menu bar icon follows your pick. Croissant waddles, and his ends jiggle when you fling him.
+- **Four app icons.** Choose one under **App Icon**: Pink & Blue, Acid, Halftone or Purple.
 - **Stays out of the way.** He lives in the menu bar, opens at login and updates himself.
 
 <p align="center">
@@ -41,12 +42,42 @@ Updates install themselves. Nematode checks when it opens and once a day. Full i
 
 ## How it works
 
-The app is built with [Tauri](https://tauri.app), so Mac and Windows share one codebase.
+Built with [Tauri](https://tauri.app): one codebase for Mac and Windows. The characters and their movement are web code
+(`src/`); the native side (`src-tauri/`) finds your tab, runs the menu and installs updates.
 
-- `src/nematode.js` draws him as a striped tube along a bendable spine, which is how he can walk, squash, stomp and tumble.
-- `src/index.html` is a transparent, click-through overlay across your screen. It only catches the mouse while your cursor is over him.
-- `site/` is the website, published to GitHub Pages by `.github/workflows/pages.yml`.
-- `src-tauri/` is the native app: the menu bar, open at login and updates. It also finds your tab: on Mac through Accessibility (`mac.rs`), on Windows through UI Automation (`win.rs`). Both read Chrome's address bar and the position of the selected tab.
+```
+src/
+  index.html            the overlay: a transparent, click-through window over your screen
+  overlay.js            behavior: where he goes, walking, stomping, physics, grabbing, dust
+  characters/*.js       one file per character: drawing + how it plays each moment
+  setup.html            the one-time permission window
+src-tauri/src/
+  main.rs               startup wiring
+  presence.rs           Away / On your tab / Summoned, and the overlay window
+  locate.rs             finding the active claude.ai tab (via mac.rs / win.rs)
+  menu.rs               the menu-bar / tray menu
+  picker.rs             a remembered-choice submenu with previews (Character, App Icon)
+  characters.rs icons.rs autostart.rs grab.rs screen.rs setup.rs store.rs update.rs
+  docktile/             macOS Dock tile plugin, so the Dock follows the chosen icon
+scripts/                build, icon and install-window rendering
+site/                   the website, published by .github/workflows/pages.yml
+```
+
+`overlay.js` never draws anything itself. Each frame it describes the moment (walking, stomping, flying, how squashed,
+how high) and hands that to the current character, which draws it its own way.
+
+### Adding a character
+
+1. Create `src/characters/<id>.js`: a drawing function, plus a `CHARACTERS.<id>` entry with `name`, `width`, `height`,
+   `dust`, `gait` and `draw(ctx, at, motion)`. The contract is at the top of `src/overlay.js`; `croissant.js` is a
+   short example.
+2. Load it in `src/index.html`.
+3. Run `npm run icons`. It finds every file in `src/characters/` and renders each one's menu preview and menu bar
+   icon (trimmed to its outline) through its own `draw`.
+4. Add one row to `src-tauri/src/characters.rs`.
+
+App icons work the same way: one row in `src-tauri/src/icons.rs` and one entry in `scripts/icon.html` and
+`scripts/icons.sh`.
 
 ## Develop
 
@@ -54,10 +85,10 @@ The app is built with [Tauri](https://tauri.app), so Mac and Windows share one c
 npm install
 npm run dev         # run with live reload
 npm run build:mac   # Nematode.app + .dmg, signed so Accessibility survives rebuilds
-npm run icons       # re-render every icon from src/nematode.js
+npm run icons       # re-render every icon and preview from src/characters/
 ```
 
-To preview the animation in a browser, serve `src/` and open `index.html?demo`.
+To preview in a browser, serve `src/` and open `index.html?demo` (add `&char=croissant` for Croissant).
 
 ## Release
 

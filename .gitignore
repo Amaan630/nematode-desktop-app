@@ -1,6 +1,6 @@
 node_modules/
 src-tauri/target/
-build/tray-full.png
+build/tray-*.png
 src-tauri/gen/
 build/.venv/
 build/dmg-background*.png

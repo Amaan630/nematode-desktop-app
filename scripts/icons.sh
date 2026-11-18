@@ -1,5 +1,5 @@
 #!/bin/sh
-# Renders every icon from the same drawing code the app uses (src/nematode.js):
+# Renders every icon from the same drawing code the app uses (src/characters/):
 # the four switchable app icons (Pink & Blue is the default bundle icon) and the menu bar icon.
 set -e
 cd "$(dirname "$0")/.."
@@ -18,14 +18,17 @@ for v in pinkblue acid halftone purple; do
 done
 cp build/icon-pinkblue.png build/icon.png
 
-mkdir -p src-tauri/icons/characters                                                       # Character menu previews
-for c in nematode croissant; do
+# Every character in src/characters/: its Character-menu preview and its menu bar icon (trimmed to his outline).
+mkdir -p src-tauri/icons/characters
+for f in src/characters/*.js; do
+  c=$(basename "$f" .js)
   shot "char=$c" "build/char-$c.png"
   sips -Z 64 "build/char-$c.png" --out "src-tauri/icons/characters/$c-menu.png" >/dev/null
+  shot "tray=$c" "build/tray-$c.png"
+  size=$("$CHROME" --headless --disable-gpu --dump-dom "file://$PWD/scripts/icon.html?tray=$c" 2>/dev/null | sed -n 's:.*<title>\(.*\)</title>.*:\1:p')
+  sips -c "${size#* }" "${size% *}" "build/tray-$c.png" --out "build/tray-$c.png" >/dev/null  # height width
+  sips -Z 64 "build/tray-$c.png" --out "src-tauri/icons/characters/$c-tray.png" >/dev/null
 done
-
-shot tray build/tray-full.png
-sips -Z 64 build/tray-full.png --out src-tauri/icons/tray.png >/dev/null
 npx tauri icon build/icon.png -o src-tauri/icons >/dev/null 2>&1
 rm -rf src-tauri/icons/ios src-tauri/icons/android src-tauri/icons/Square*.png src-tauri/icons/StoreLogo.png
 

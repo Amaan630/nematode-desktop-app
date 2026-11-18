@@ -1,4 +1,5 @@
-// Croissant, the second character. Flat 2D cel-shaded: solid fills, one hard-edged shadow per shape,
+// Croissant. Drawing: drawCroissant() (also used for menu previews). Overlay character: bottom of file.
+// Flat 2D cel-shaded: solid fills, one hard-edged shadow per shape,
 // a flat glint, bold outlines. Seven layers on a drooping crescent, stubby legs he waddles on.
 // pose: { x, ground, scale (px per unit; ~1.4 units wide, ~0.8 tall), face (1 right, -1 left),
 //         phase (walk cycle 0..1), walk (0 standing .. 1 waddling), squash, rot, blink,
@@ -91,15 +92,31 @@ function drawCroissant(ctx, p) {
 
 // Springy ends: feed it his on-screen acceleration each frame, read .angles for pose.jiggle.
 // Moving up (or stopping a fall) makes both ends droop; sideways makes the trailing end lag.
+// `rest` is where the ends settle: 0 standing, a little droop when nothing's holding them up.
 class CroissantJiggle {
   constructor(stiffness = 260, damping = 12) { this.k = stiffness; this.c = damping; this.angles = [0, 0]; this.vel = [0, 0]; }
-  step(dt, ax, ay, scale) {           // ax, ay in px/s², scale in px per unit
+  step(dt, ax, ay, scale, rest = 0) { // ax, ay in px/s², scale in px per unit
     const push = [(-ay + ax) / scale, (-ay - ax) / scale].map(v => (Number.isFinite(v) ? v : 0));
     for (let i = 0; i < 2; i++) {
-      const acc = -this.k * this.angles[i] - this.c * this.vel[i] + .14 * push[i];
+      const acc = -this.k * (this.angles[i] - rest) - this.c * this.vel[i] + .22 * push[i];
       this.vel[i] += acc * dt;
-      this.angles[i] = Math.max(-.32, Math.min(.32, this.angles[i] + this.vel[i] * dt));
+      this.angles[i] = Math.max(-.45, Math.min(.45, this.angles[i] + this.vel[i] * dt));
     }
     return this.angles;
   }
 }
+
+// As an overlay character (see src/overlay.js for the contract).
+if (typeof CHARACTERS !== 'undefined') CHARACTERS.croissant = {
+  name: 'Croissant', width: 100, height: 58, dust: '#d9964d', // golden crumbs
+  gait: { hz: 2.2, pace: () => .75 },                          // steady waddle
+  jiggle: new CroissantJiggle(),
+  draw(ctx, at, m) {
+    return drawCroissant(ctx, {
+      x: at.x, ground: at.ground - m.hop, scale: 70 * (at.zoom ?? 1), face: at.face, rot: at.rot,
+      walk: m.state === 'walk' ? 1 : 0, phase: m.phase,
+      squash: 1 - m.stretch, blink: (at.now / 1000) % 3.7 < .12 ? 1 : 0,
+      jiggle: this.jiggle.step(at.dt, at.accel[0] * at.face, at.accel[1], 70, m.state === 'held' ? .2 : 0), // ends sag when held
+    });
+  },
+};

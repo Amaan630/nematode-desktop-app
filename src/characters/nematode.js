@@ -87,3 +87,22 @@ function drawNematode(ctx, p) {
   ctx.restore();
   return hit; // body outline in screen space, for hit-testing
 }
+
+// As an overlay character (see src/overlay.js for the contract).
+if (typeof CHARACTERS !== 'undefined') CHARACTERS.nematode = {
+  name: 'Nematode', width: 40, height: 64, dust: '#b9a35e',
+  // Inchworm gait: each ripple up the body surges him forward.
+  gait: { hz: 3.2, pace: phase => .45 + .85 * Math.max(0, Math.sin(2 * Math.PI * phase)) },
+  draw(ctx, at, m) {
+    const p = { x: at.x, ground: at.ground - m.hop, scale: 64 * (at.zoom ?? 1), face: at.face, rot: at.rot, stretch: m.stretch };
+    const surge = Math.sin(2 * Math.PI * m.phase);
+    if (m.state === 'walk') Object.assign(p, { phase: m.phase, wave: .16, curl: 1 - .12 * surge,
+      stretch: 1 + .06 * surge, hop: 3 * Math.max(0, surge), ground: at.ground, mouth: .8 + .2 * surge });
+    else if (m.state === 'held') Object.assign(p, { phase: m.phase, wave: .3, curl: 1.15, mouth: 1.2 }); // wriggling
+    else if (m.state === 'idle') { const b = Math.sin(m.t * 3); Object.assign(p, { curl: 1 + .05 * b, stretch: 1 + .02 * b }); }
+    else Object.assign(p, { // stomp, leap, fly: curls up winding up and on impact, tucks in mid-air
+      curl: 1 + .3 * m.crouch + .25 * m.impact - (m.airborne ? .12 : 0),
+      mouth: 1 - .3 * m.crouch + .2 * m.impact + (m.airborne ? .1 : 0) });
+    return drawNematode(ctx, p);
+  },
+};
