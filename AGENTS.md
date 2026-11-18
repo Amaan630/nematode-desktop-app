@@ -16,6 +16,8 @@ overlay over your screen:
 - From the menu bar you can **Summon** him (he roams above the Dock, wanders, sometimes runs from the cursor) and
   **Dismiss** him.
 - You can **grab and throw** him: gravity, spin, bounces off screen edges, he stands up and walks back.
+- **Click** him (a press under 5 px and 0.25 s) and a cel-shaded heart pops out above his head and floats away.
+  A press that moves or lasts longer becomes a grab (`CLICK_PX`, `CLICK_S` in `overlay.js`).
 - Two **characters**: Nematode (the original) and Croissant. More will be added (see §6).
 - Five **app icons**, all fixed. **Soft Pink** (Croissant on the site pink) is the default; the dithered four show Nematode.
   The **menu bar icon** is the current character.
@@ -44,7 +46,7 @@ These came from direct feedback. Breaking them has cost real time before.
 - **Simple for non-technical people.** No Chrome extensions, no developer mode, no terminal steps for users.
 - Never do anything invasive to the user's system: e.g. **never restart the Dock** (`killall Dock` un-minimizes all
   windows — this was tried and rejected). Find the proper API instead (see the Dock tile plugin).
-- Characters are **flat 2D cel-shaded** (solid fills, one hard shadow, bold outline). No soft 3D shading, no crumbs,
+- Characters are **flat 2D cel-shaded** (solid fills, one hard shadow, bold **dark** outline; the dithered icons alone draw Nematode with a light rim). No soft 3D shading, no crumbs,
   no gradients on characters. **Nematode has no shine** (only a flat shadow band down his back; highlights were
   rejected as too glossy). **Croissant keeps his small glint strokes.**
 - Icon/tile backgrounds are **flat colors, never gradients**. The soft pink everywhere is the site's `#ffc9d9`;
@@ -64,6 +66,7 @@ These came from direct feedback. Breaking them has cost real time before.
 src/                          web code, bundled into the app (Tauri frontendDist)
   index.html                  overlay window shell: defines CHARACTERS, loads characters + overlay.js
   overlay.js                  behavior engine (never draws). Contract for characters at the top.
+  heart.js                    drawHeart(): the cel-shaded heart a click pops out (drawn by overlay.js)
   characters/nematode.js      drawNematode() + CHARACTERS.nematode adapter
   characters/croissant.js     drawCroissant() + CroissantJiggle + CHARACTERS.croissant adapter
                               (drawNematode/drawCroissant are THE central drawings: overlay, icons, menu-bar icons,
@@ -115,8 +118,8 @@ The overlay is one transparent, frameless, always-on-top window covering one mon
 (click-through) except while the cursor is over the character.
 
 `overlay.js` owns **behavior**: where he goes (`want.mode` = `away` | `tab` | `free`), states
-(`gone`, `walk`, `leap`, `stomp`, `idle`, `held`, `fly`), physics (gravity 2600 px/s², bounces), dust, grabbing.
-It **never draws**. Each frame it builds a neutral **`motion`** and calls the current character:
+(`gone`, `walk`, `leap`, `stomp`, `idle`, `held`, `fly`), physics (gravity 2600 px/s², bounces), dust, grabbing,
+click hearts. It **never draws a character** (dust and hearts are its own). Each frame it builds a neutral **`motion`** and calls the current character:
 
 ```
 CHARACTERS[id] = {
@@ -214,6 +217,11 @@ when he's Away (never yanks him mid-stomp).
 - No Apple Developer ID yet (owner has an account but chose not to do it now). Users see "Apple could not verify"
   once and use System Settings → Privacy & Security → Open Anyway. Windows shows SmartScreen.
 - Reset Accessibility for testing a fresh install: `tccutil reset Accessibility com.nematode.app`.
+- Testing a local build on the owner's Mac: don't use `npm run dev` or run the binary from a shell (macOS then checks
+  Accessibility for the terminal, not Nematode). Build an app, sign it like a release, quit the installed copy, open it:
+  `npx tauri build --debug --bundles app` (the updater-key error at the end is harmless), then
+  `codesign --force --deep --sign - --identifier com.nematode.app -r='designated => identifier "com.nematode.app"' src-tauri/target/debug/bundle/macos/Nematode.app`
+  and `open -n` that path. Check with `pgrep -fl MacOS/nematode` that only the local one runs.
 
 ---
 

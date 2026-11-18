@@ -31,7 +31,10 @@ const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 function source(size, scale = .5, x0 = .5, ground = .77) {
   const c = document.createElement('canvas'); c.width = c.height = size;
   const x = c.getContext('2d');
+  // A light outline gives the dithered icons their crisp rim (he's dark-outlined everywhere else).
+  const line = NEMA_COLORS.line; NEMA_COLORS.line = '#efd99b';
   drawNematode(x, { x: size * x0, ground: size * ground, scale: size * scale, face: -1 });
+  NEMA_COLORS.line = line;
   x.globalCompositeOperation = 'source-atop';
   const g = x.createLinearGradient(size * .25, size * .15, size * .8, size * .9);
   g.addColorStop(0, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(0,0,0,.45)');

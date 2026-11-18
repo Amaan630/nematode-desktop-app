@@ -21,6 +21,7 @@
 - **Finds your Claude tab.** Switch to claude.ai in Chrome and he walks in from the left and stomps on that exact tab, whether your tabs run along the top or down the side.
 - **Comes when called.** Choose **Summon** from the menu bar and he hangs out above your Dock, wandering around and sometimes running from your cursor. **Dismiss** sends him away.
 - **Can be thrown.** Grab him and fling him around. He tumbles, bounces off the edges of your screen, picks himself up and walks back.
+- **Likes you back.** Click him (a quick click, not a grab) and a heart pops out and floats away.
 - **Two characters.** Nematode or Croissant, under **Character** in the menu bar. The menu bar icon follows your pick. Croissant waddles, and his ends jiggle when you fling him.
 - **Five app icons.** Choose one under **App Icon**. **Soft Pink** (the default, with Croissant), Pink & Blue,
   Acid, Halftone and Purple.
@@ -50,7 +51,8 @@ Built with [Tauri](https://tauri.app): one codebase for Mac and Windows. The cha
 ```
 src/
   index.html            the overlay: a transparent, click-through window over your screen
-  overlay.js            behavior: where he goes, walking, stomping, physics, grabbing, dust
+  overlay.js            behavior: where he goes, walking, stomping, physics, grabbing, dust, hearts
+  heart.js              the heart that floats up when you click him
   characters/*.js       one file per character: drawing + how it plays each moment
   setup.html            the one-time permission window
 src-tauri/src/
@@ -101,7 +103,7 @@ To preview in a browser, serve `src/` and open `index.html?demo` (add `&char=cro
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit, then tag it:
 
 ```bash
-git tag v0.3.6 && git push --tags
+git tag v0.3.7 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.

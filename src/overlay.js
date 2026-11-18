@@ -1,4 +1,4 @@
-// The overlay's behavior: where the character goes, how he moves, physics, grabbing and dust.
+// The overlay's behavior: where the character goes, how he moves, physics, grabbing, dust and hearts.
 // It never draws a character itself. Each frame it describes the moment as a neutral `motion` and hands it,
 // with his position, to the current character (src/characters/*.js), which draws it its own way.
 //
@@ -18,6 +18,7 @@ const SPEED = 210;                           // walking px/s
 const STOMP = 0.62, STOMPS = 3, REST = 1.4;  // 3 stomps, then a breather
 const G = 2600, BOUNCE = 0.5;                // throw physics: gravity px/s², wall bounciness
 const HELD_HZ = 5;                           // wriggle/paddle cycles per second while held
+const CLICK_PX = 5, CLICK_S = .25;           // a press that moves less and lets go sooner is a click, not a grab
 
 const tauri = window.__TAURI__?.core;
 const cv = document.querySelector('canvas'), ctx = cv.getContext('2d');
@@ -44,7 +45,7 @@ const OFF = () => -character().width; // just past the left edge
 const n = { x: -200, y: 0, face: 1, state: 'gone', phase: 0, t: 0, landed: -1, rot: 0, vx: 0, vy: 0, vr: 0, squash: 0,
             home: null, cursor: null, wasNear: false, fleeing: false, flees: 0, nextWander: 0 };
 const want = { mode: 'away', x: 0, y: 0, floor: innerHeight };
-let hit = null, hover = false, drag = null, dust = [], running = false, last = 0, polling = false;
+let hit = null, hover = false, press = null, drag = null, dust = [], hearts = [], running = false, last = 0, polling = false;
 let prevPos = null, prevVel = [0, 0];
 
 // Called by the app: { mode: 'away' | 'tab' | 'free', x, y, floor, reset }.
@@ -177,10 +178,28 @@ function drawDust(dt) {
   ctx.globalAlpha = 1;
 }
 
+// --- Hearts --------------------------------------------------------------------------------------
+// Click him and a heart pops out above his head, then floats up, swaying, and fades away.
+function heart() {
+  hearts.push({ x: n.x, y: n.y - character().height * 1.05, t: 0, sway: Math.random() * 6, dir: Math.random() < .5 ? -1 : 1 });
+  start();
+}
+function drawHearts(dt) {
+  hearts = hearts.filter(h => (h.t += dt) < 1.8);
+  for (const h of hearts) {
+    const pop = h.t < .25 ? 1 + .25 * Math.sin(Math.PI * h.t / .25) : 1; // overshoots, then settles
+    const grow = Math.min(1, h.t / .12), rise = 70 * h.t + 25 * h.t * h.t;
+    ctx.globalAlpha = Math.min(1, (1.8 - h.t) / .5);
+    drawHeart(ctx, h.x + h.dir * 12 * Math.sin(2.6 * h.t + h.sway) - h.dir * 12 * Math.sin(h.sway), h.y - rise,
+              26 * grow * pop, .18 * Math.sin(2.6 * h.t + h.sway + 1));
+  }
+  ctx.globalAlpha = 1;
+}
+
 // --- Frame ---------------------------------------------------------------------------------------
 function frame(now) {
   try { tick(now); } catch (e) { console.error(e); } // one bad frame must never freeze him
-  if (n.state !== 'gone' || dust.length) requestAnimationFrame(frame);
+  if (n.state !== 'gone' || dust.length || hearts.length) requestAnimationFrame(frame);
   else { running = false; setHover(false); }
 }
 
@@ -212,12 +231,13 @@ function tick(now) {
   hit = n.state === 'gone' ? null
     : character().draw(ctx, { x: n.x, ground: n.y, face: n.face, rot: n.rot, accel, dt, now }, motion);
   drawDust(dt);
+  drawHearts(dt);
   pollCursor();
 }
 
 // --- Grabbing ------------------------------------------------------------------------------------
 // The overlay ignores the mouse so clicks reach your apps. While the cursor is over him we take the
-// mouse, so you can grab him.
+// mouse, so you can grab him. A press only becomes a grab once it moves or lasts; a quick click gets a heart.
 function isOver(x, y) {
   if (!hit) return false;
   ctx.lineWidth = 14;
@@ -235,8 +255,15 @@ function pollCursor() {
   tauri.invoke('cursor').then(([x, y]) => { n.cursor = [x, y]; setHover(isOver(x, y)); }).finally(() => polling = false);
 }
 
+function grab() {
+  cv.style.cursor = 'grabbing';
+  drag = press; press = null;
+  Object.assign(n, { state: 'held', vx: 0, vy: 0 });
+  start();
+}
 cv.addEventListener('pointermove', e => {
-  if (!drag) return tauri || (n.cursor = [e.clientX, e.clientY], setHover(isOver(e.clientX, e.clientY))); // browser preview
+  if (press && (Math.hypot(e.clientX - press.x, e.clientY - press.y) > CLICK_PX || e.timeStamp - press.at > CLICK_S * 1000)) grab();
+  if (!drag) return press || tauri || (n.cursor = [e.clientX, e.clientY], setHover(isOver(e.clientX, e.clientY))); // browser preview
   n.x += e.clientX - drag.x; n.y += e.clientY - drag.y;
   drag.x = e.clientX; drag.y = e.clientY;
   drag.hist.push([e.timeStamp, e.clientX, e.clientY]);
@@ -246,12 +273,11 @@ cv.addEventListener('pointermove', e => {
 cv.addEventListener('pointerdown', e => {
   if (!isOver(e.clientX, e.clientY)) return;
   cv.setPointerCapture(e.pointerId);
-  cv.style.cursor = 'grabbing';
-  drag = { x: e.clientX, y: e.clientY, hist: [[e.timeStamp, e.clientX, e.clientY]] };
-  Object.assign(n, { state: 'held', vx: 0, vy: 0 });
-  start();
+  press = { x: e.clientX, y: e.clientY, at: e.timeStamp, hist: [[e.timeStamp, e.clientX, e.clientY]] };
+  press.timer = setTimeout(() => press && grab(), CLICK_S * 1000); // held still: still a grab
 });
 cv.addEventListener('pointerup', e => {
+  if (press) { clearTimeout(press.timer); press = null; heart(); tauri?.invoke('release'); return; }
   if (!drag) return;
   const [t0, x0, y0] = drag.hist[0], dt = Math.max(.016, (e.timeStamp - t0) / 1000);
   const clamp = v => Math.max(-4000, Math.min(4000, v));

@@ -1,7 +1,7 @@
 // Nematode, drawn as a banded tube along a curved spine so he can bend, squash and wiggle.
 // pose: { x, ground, scale (px per body length), face (1 right, -1 left),
 //         phase, wave, curl, stretch, hop, mouth, rot (radians) }
-const NEMA_COLORS = { light: '#a99b63', dark: '#86732c', line: '#efd99b', mouth: '#4a4519',
+const NEMA_COLORS = { light: '#a99b63', dark: '#86732c', line: '#3b3112', mouth: '#4a4519',
                       shade: 'rgba(60, 48, 0, .3)' }; // cel shadow (flat, no shine)
 const NEMA_BANDS = [[0, .16, 'light'], [.16, .3, 'dark'], [.3, .42, 'light'], [.42, .54, 'dark'],
                     [.54, .87, 'light'], [.87, .89, 'dark'], [.89, .905, 'light'], [.905, .925, 'dark'], [.925, 1, 'light']];
