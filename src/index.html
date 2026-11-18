@@ -23,37 +23,68 @@ function fit() {
 }
 fit(); addEventListener('resize', fit);
 
-// n.y is where his feet are. want is where the app says his Claude tab is.
-const n = { x: OFF, y: 0, face: 1, state: 'gone', phase: 0, t: 0, landed: -1, rot: 0, vx: 0, vy: 0, vr: 0, squash: 0 };
-const want = { show: false, x: 0, y: 0 };
+// n.y is where his feet are. want is what the app says he should be doing:
+//   away = leave; tab = stomp on the Claude tab at (x, y); free = summoned, roam the floor.
+const n = { x: OFF, y: 0, face: 1, state: 'gone', phase: 0, t: 0, landed: -1, rot: 0, vx: 0, vy: 0, vr: 0, squash: 0,
+            home: null, cursor: null, wasNear: false, fleeing: false, flees: 0, nextWander: 0 };
+const want = { mode: 'away', x: 0, y: 0, floor: innerHeight };
 let hit = null, hover = false, drag = null, dust = [], running = false, last = 0, polling = false;
 
-// Called by the app: {show:true, x, y} = go stomp there; {show:false} = leave; {reset:true} = new screen.
 function nema(m) {
   if (m.reset) Object.assign(n, { x: OFF, state: 'gone' });
-  if (m.show) Object.assign(want, { show: true, x: m.x, y: m.y }); else want.show = false;
+  if (m.floor) want.floor = m.floor;
+  if (m.mode === 'tab') Object.assign(want, { x: m.x, y: m.y });
+  if (m.mode === 'free' && want.mode !== 'free') n.home = null; // pick a fresh spot
+  want.mode = m.mode;
   if (n.state === 'gone') {
-    if (!want.show) return;
-    Object.assign(n, { x: OFF, y: want.y });
-    go();
-  } else if (n.state === 'walk' || n.state === 'stomp') go(); // held/fly/leap check `want` when they finish
+    if (want.mode === 'away') return;
+    Object.assign(n, { x: OFF, y: want.mode === 'tab' ? want.y : want.floor });
+  }
+  if (['gone', 'walk', 'stomp', 'idle'].includes(n.state)) go(); // held/fly/leap check `want` when they finish
   start();
 }
 function start() { if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); } }
 
-// Pick the next move: walk over, leap up/down to the tab, stomp, or leave.
-function go() {
-  if (want.show && n.state === 'stomp' && Math.abs(want.y - n.y) > 4) return leap();
-  const tx = want.show ? want.x : OFF;
-  if (Math.abs(tx - n.x) > 2) return n.state = 'walk';
-  if (!want.show) return n.state = 'gone';
-  if (Math.abs(want.y - n.y) > 4) return leap();
-  if (n.state !== 'stomp') Object.assign(n, { state: 'stomp', t: 0, landed: -1 });
+const clampX = x => Math.max(SIZE, Math.min(innerWidth - SIZE, x));
+function goal() {
+  if (want.mode === 'tab') return { x: want.x, y: want.y, then: 'stomp' };
+  if (want.mode === 'free') {
+    n.home ??= clampX(innerWidth * (.25 + Math.random() * .5));
+    return { x: n.home, y: want.floor, then: 'idle' };
+  }
+  return { x: OFF, y: n.y, then: 'gone' };
 }
-function leap() {
-  const dx = want.x - n.x, dy = want.y - n.y;
-  Object.assign(n, { state: 'leap', t: 0, from: [n.x, n.y], to: [want.x, want.y], face: Math.sign(dx) || n.face,
+
+// Pick the next move toward the goal: walk over, leap up/down, then settle into stomping or idling.
+function go() {
+  const g = goal(), settled = n.state === 'stomp' || n.state === 'idle';
+  if (settled && want.mode !== 'away' && Math.abs(g.y - n.y) > 4) return leap(g);
+  if (Math.abs(g.x - n.x) > 2) return n.state = 'walk';
+  if (Math.abs(g.y - n.y) > 4) return leap(g);
+  if (n.state === g.then) return;
+  Object.assign(n, { state: g.then, t: 0, landed: -1, nextWander: 5 + Math.random() * 8 });
+}
+function leap(g) {
+  const dx = g.x - n.x, dy = g.y - n.y;
+  Object.assign(n, { state: 'leap', t: 0, from: [n.x, n.y], to: [g.x, g.y], face: Math.sign(dx) || n.face,
                      dur: .45 + Math.min(.6, Math.hypot(dx, dy) / 2000), arc: 50 + .25 * Math.abs(dy) });
+}
+
+// Summoned and idle: now and then he wanders off, and sometimes he bolts when your cursor gets close.
+function idle() {
+  const c = n.cursor, near = c && Math.hypot(c[0] - n.x, c[1] - (n.y - SIZE / 2)) < 140;
+  if (!near) { n.wasNear = false; n.flees = 0; }
+  else if (!n.wasNear) {
+    n.wasNear = true;
+    if (n.flees < 3 && Math.random() < .5) return flee(c);
+  }
+  if (n.t > n.nextWander) { n.home = clampX(n.x + (Math.random() - .5) * 600); go(); }
+}
+function flee(c) {
+  let dir = Math.sign(n.x - c[0]) || 1;
+  if (clampX(n.x + dir * 200) === n.x) dir = -dir; // cornered: dash the other way
+  Object.assign(n, { fleeing: true, flees: n.flees + 1, home: clampX(n.x + dir * (220 + Math.random() * 180)) });
+  go();
 }
 
 const ease = k => k * k * (3 - 2 * k);
@@ -88,7 +119,7 @@ function drawDust(dt) {
 
 // Thrown: gravity, spin, bounce off every screen edge, slide to a stop on the floor, stand up, carry on.
 function fly(dt) {
-  const W = innerWidth, H = innerHeight, side = SIZE * .3;
+  const W = innerWidth, H = want.floor, side = SIZE * .3;
   n.vy += G * dt; n.x += n.vx * dt; n.y += n.vy * dt; n.rot += n.vr * dt;
   if (n.x < side || n.x > W - side) {
     n.x = Math.min(W - side, Math.max(side, n.x)); n.vx *= -BOUNCE; n.vr *= -.6;
@@ -106,7 +137,7 @@ function fly(dt) {
     n.vx *= Math.exp(-5 * dt); n.vr = 0;
     n.rot = Math.atan2(Math.sin(n.rot), Math.cos(n.rot)) * Math.exp(-8 * dt);
     if (Math.abs(n.vx) < 20 && Math.abs(n.rot) < .08) {
-      if ((n.t += dt) > .4) { Object.assign(n, { rot: 0, vx: 0, t: 0 }); go(); }
+      if ((n.t += dt) > .4) { Object.assign(n, { rot: 0, vx: 0, t: 0, home: n.x }); go(); } // summoned: stay where he landed
     } else n.t = 0;
   }
   n.squash *= Math.exp(-10 * dt);
@@ -116,17 +147,22 @@ function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (n.state === 'walk') {
     // Inchworm-ish gait: a wave ripples up the body and each ripple surges him forward.
-    const tx = want.show ? want.x : OFF, dir = Math.sign(tx - n.x);
+    const tx = goal().x, dir = Math.sign(tx - n.x), fast = n.fleeing ? 2.3 : 1;
     n.face = dir || n.face;
-    n.phase = (n.phase + dt * STEP_HZ) % 1;
-    n.x += dir * SPEED * dt * (.45 + .85 * Math.max(0, Math.sin(2 * Math.PI * n.phase)));
-    if (!dir || Math.sign(tx - n.x) !== dir) { n.x = tx; go(); }
+    n.phase = (n.phase + dt * STEP_HZ * (n.fleeing ? 1.8 : 1)) % 1;
+    n.x += dir * SPEED * fast * dt * (.45 + .85 * Math.max(0, Math.sin(2 * Math.PI * n.phase)));
+    if (!dir || Math.sign(tx - n.x) !== dir) {
+      n.x = tx;
+      if (n.fleeing) Object.assign(n, { fleeing: false, wasNear: false }); // still close? he may bolt again
+      go();
+    }
   } else if (n.state === 'leap') {
     const u = Math.min(1, (n.t += dt) / n.dur);
     n.x = n.from[0] + (n.to[0] - n.from[0]) * u;
     n.y = n.from[1] + (n.to[1] - n.from[1]) * u - 4 * n.arc * u * (1 - u);
     if (u === 1) { puff(); n.state = 'landing'; go(); }
   } else if (n.state === 'stomp') n.t += dt;
+  else if (n.state === 'idle') { n.t += dt; idle(); }
   else if (n.state === 'fly') fly(dt);
   else if (n.state === 'held') n.phase = (n.phase + dt * 5) % 1;
 
@@ -135,6 +171,7 @@ function frame(now) {
   if (n.state === 'walk') Object.assign(pose, { phase: n.phase, wave: .16, curl: 1 - .12 * surge,
     stretch: 1 + .06 * surge, hop: 3 * Math.max(0, surge), mouth: .8 + .2 * surge });
   else if (n.state === 'stomp') Object.assign(pose, stomp(n.t));
+  else if (n.state === 'idle') { const b = Math.sin(n.t * 3); Object.assign(pose, { curl: 1 + .05 * b, stretch: 1 + .02 * b }); }
   else if (n.state === 'leap') { const u = n.t / n.dur; Object.assign(pose, { stretch: 1.12 - .2 * u, curl: .9, mouth: 1.1 }); }
   else if (n.state === 'held') Object.assign(pose, { phase: n.phase, wave: .3, curl: 1.15, mouth: 1.2 }); // wriggling
   else if (n.state === 'fly') Object.assign(pose, { stretch: 1 - n.squash, curl: 1 + n.squash, mouth: 1.15 });
@@ -164,11 +201,11 @@ function setHover(h) {
 function pollCursor() {
   if (!tauri || drag || polling || n.state === 'gone') return;
   polling = true;
-  tauri.invoke('cursor').then(([x, y]) => setHover(isOver(x, y))).finally(() => polling = false);
+  tauri.invoke('cursor').then(([x, y]) => { n.cursor = [x, y]; setHover(isOver(x, y)); }).finally(() => polling = false);
 }
 
 cv.addEventListener('pointermove', e => {
-  if (!drag) return tauri || setHover(isOver(e.clientX, e.clientY)); // browser preview has no Tauri
+  if (!drag) return tauri || (n.cursor = [e.clientX, e.clientY], setHover(isOver(e.clientX, e.clientY))); // browser preview
   n.x += e.clientX - drag.x; n.y += e.clientY - drag.y;
   drag.x = e.clientX; drag.y = e.clientY;
   drag.hist.push([e.timeStamp, e.clientX, e.clientY]);
@@ -197,6 +234,6 @@ cv.addEventListener('pointerup', e => {
 // Browser preview: index.html?demo
 if (location.search === '?demo') {
   document.body.style.background = '#dfe3e8';
-  nema({ show: true, x: 520, y: 200 });
+  nema({ mode: 'free', floor: innerHeight - 20 });
 }
 </script>
