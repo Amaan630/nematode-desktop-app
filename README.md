@@ -81,6 +81,10 @@ App icons work the same way: one row in `src-tauri/src/icons.rs` and one entry i
 
 ## Develop
 
+Working on the code (person or AI)? Start with [AGENTS.md](AGENTS.md): architecture, release process, testing and
+conventions in one place.
+
+
 ```bash
 npm install
 npm run dev         # run with live reload
