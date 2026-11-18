@@ -33,11 +33,11 @@
 
 ## Install
 
-**Mac:** open `Nematode-Mac.dmg` and drag Nematode into Applications. The first time you open it, macOS warns that it's from an unidentified developer. Go to **System Settings → Privacy & Security** and click **Open Anyway**. Then click **Allow** so he can see where your tabs are.
+**Mac:** open `Nematode-Mac.dmg` and drag Nematode onto the Applications folder, following the arrow. The first time you open it, macOS warns that it's from an unidentified developer. Go to **System Settings → Privacy & Security** and click **Open Anyway**. Then click **Allow** so he can see where your tabs are.
 
-**Windows:** run `Nematode-Windows-Setup.exe`.
+**Windows:** run `Nematode-Windows-Setup.exe`. If SmartScreen appears, click **More info → Run anyway**.
 
-Updates install themselves. Nematode checks when it opens and once a day.
+Updates install themselves. Nematode checks when it opens and once a day. Full instructions are also on the [website](https://amaan630.github.io/nematode-desktop-app/#install).
 
 ## How it works
 
@@ -64,7 +64,7 @@ To preview the animation in a browser, serve `src/` and open `index.html?demo`.
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit, then tag it:
 
 ```bash
-git tag v0.3.0 && git push --tags
+git tag v0.3.3 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.

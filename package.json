@@ -1,7 +1,7 @@
 {
   "name": "nematode",
   "productName": "Nematode",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A little nematode who stomps on your Claude tab.",
   "scripts": {
     "dev": "tauri dev",
