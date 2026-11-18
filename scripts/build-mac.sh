@@ -6,8 +6,8 @@
 set -e
 cd "$(dirname "$0")/.."
 npx tauri build --bundles app "$@"
-OUT=src-tauri/target/release/bundle
-APP="$OUT/macos/Nematode.app"
+APP=$(ls -td src-tauri/target/release/bundle/macos/Nematode.app src-tauri/target/*/release/bundle/macos/Nematode.app 2>/dev/null | head -1) # newest; --target builds land in target/<triple>/
+OUT=$(dirname "$(dirname "$APP")")
 codesign --force --deep --sign - --identifier com.nematode.app \
   -r='designated => identifier "com.nematode.app"' "$APP"
 STAGE=$(mktemp -d)

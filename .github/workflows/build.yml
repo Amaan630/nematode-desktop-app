@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false # one platform failing shouldn't cancel the other
       matrix:
         include:
           - os: macos-latest
