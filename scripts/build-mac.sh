@@ -12,6 +12,20 @@ export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
 npx tauri build --bundles app "$@"
 APP=$(ls -td src-tauri/target/release/bundle/macos/Nematode.app src-tauri/target/*/release/bundle/macos/Nematode.app 2>/dev/null | head -1) # newest; --target builds land in target/<triple>/
 OUT=$(dirname "$(dirname "$APP")")
+
+# Dock tile plugin: lets the pinned Dock icon follow the icon picked in the menu bar (universal, with the icons).
+PLUG="$APP/Contents/PlugIns/NematodeDockTile.docktileplugin/Contents"
+TMP=$(mktemp -d)
+mkdir -p "$PLUG/MacOS" "$PLUG/Resources"
+for arch in arm64 x86_64; do
+  swiftc -parse-as-library -O -target "$arch-apple-macos11" -module-name NematodeDockTile -Xlinker -bundle \
+    -o "$TMP/$arch" src-tauri/docktile/NematodeDockTile.swift
+done
+lipo -create "$TMP/arm64" "$TMP/x86_64" -output "$PLUG/MacOS/NematodeDockTile"
+rm -rf "$TMP"
+cp src-tauri/docktile/Info.plist "$PLUG/Info.plist"
+for f in src-tauri/icons/variants/*.png; do case "$f" in *-menu.png) ;; *) cp "$f" "$PLUG/Resources/" ;; esac; done
+
 codesign --force --deep --sign - --identifier com.nematode.app \
   -r='designated => identifier "com.nematode.app"' "$APP"
 

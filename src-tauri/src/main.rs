@@ -102,12 +102,12 @@ fn main() {
                         let _ = login.set_checked(a.is_enabled().unwrap_or(on));
                     }
                     "quit" => app.exit(0),
-                    id if id.starts_with("icon:") => set_icon(app, &id[5..], true),
+                    id if id.starts_with("icon:") => set_icon(app, &id[5..]),
                     _ => {}
                 })
                 .build(app)?;
 
-            set_icon(app.handle(), chosen, false); // re-applies after updates, which replace the bundle
+            set_icon(app.handle(), chosen); // re-applies after updates, which replace the bundle
 
             #[cfg(target_os = "macos")]
             if !mac::trusted(false) {
@@ -154,9 +154,9 @@ fn icon_choice_file(app: &AppHandle) -> std::path::PathBuf {
     app.path().app_data_dir().unwrap_or_default().join("icon")
 }
 
-/// Switches the app icon: on macOS the Finder/Launchpad/Applications icon, on Windows the tray icon
+/// Switches the app icon: on macOS in Finder/Launchpad and the Dock, on Windows the tray icon
 /// (the only icon Nematode shows there). Remembers the choice and ticks it in the menu.
-fn set_icon(app: &AppHandle, id: &str, from_menu: bool) {
+fn set_icon(app: &AppHandle, id: &str) {
     let Some(&(id, _, full, preview)) = ICONS.iter().find(|i| i.0 == id) else { return };
     let file = icon_choice_file(app);
     let _ = std::fs::create_dir_all(file.parent().unwrap());
@@ -164,11 +164,12 @@ fn set_icon(app: &AppHandle, id: &str, from_menu: bool) {
     #[cfg(target_os = "macos")]
     {
         let _ = preview;
-        mac::set_app_icon((id != ICONS[0].0).then_some(full), from_menu); // default: drop the override, use the bundle's own
+        mac::set_app_icon((id != ICONS[0].0).then_some(full)); // Finder/Launchpad; default drops the override
+        mac::set_dock_icon(id); // Dock tile, drawn by our Dock tile plugin
     }
     #[cfg(windows)]
     {
-        let _ = (full, from_menu);
+        let _ = full;
         if let (Some(tray), Ok(img)) = (app.tray_by_id("tray"), Image::from_bytes(preview)) {
             let _ = tray.set_icon(Some(img));
         }

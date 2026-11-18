@@ -18,6 +18,8 @@ extern "C" {
     fn AXValueGetValue(v: CFTypeRef, kind: u32, out: *mut c_void) -> bool;
     fn AXIsProcessTrustedWithOptions(opts: CFDictionaryRef) -> bool;
     static kAXTrustedCheckOptionPrompt: CFStringRef;
+    fn CFPreferencesSetAppValue(key: CFStringRef, value: CFTypeRef, app: CFStringRef);
+    fn CFPreferencesAppSynchronize(app: CFStringRef) -> bool;
 }
 
 /// Is Nematode allowed to use Accessibility? `prompt` shows the system dialog if not.
@@ -133,8 +135,7 @@ pub fn float_above_menu_bar(ns_window: *mut c_void) {
 
 /// Sets (Some png) or clears (None) the custom Finder/Launchpad icon on this app's bundle.
 /// The code signature still validates and Accessibility stays granted (checked on a real install).
-/// `refresh_dock`: the Dock caches icons of pinned apps, so restart it (a brief flicker) when we're pinned.
-pub fn set_app_icon(png: Option<&[u8]>, refresh_dock: bool) {
+pub fn set_app_icon(png: Option<&[u8]>) {
     let bundle = std::env::current_exe().ok().and_then(|p| p.ancestors().nth(3).map(|b| b.to_path_buf()));
     let Some(bundle) = bundle.filter(|b| b.extension().is_some_and(|e| e == "app")) else { return }; // dev builds: no bundle
     let path = CFString::new(&bundle.to_string_lossy());
@@ -153,17 +154,20 @@ pub fn set_app_icon(png: Option<&[u8]>, refresh_dock: bool) {
         }
         let _: () = msg_send![ws, noteFileSystemChanged: ns_path]; // nudge Finder to re-read it
     });
-    let _ = std::process::Command::new("touch").arg(&bundle).status(); // and invalidate cached icons
-    if refresh_dock && in_dock() {
-        let _ = std::process::Command::new("killall").arg("Dock").status(); // the Dock relaunches itself
-    }
 }
 
-/// Is Nematode pinned in the Dock?
-fn in_dock() -> bool {
-    std::process::Command::new("defaults")
-        .args(["read", "com.apple.dock", "persistent-apps"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains("com.nematode.app"))
-        .unwrap_or(false)
+/// Tells the Dock tile plugin (src-tauri/docktile) which icon to draw: saved where it reads it
+/// (this app's preferences), then a notification so it redraws right away.
+pub fn set_dock_icon(id: &str) {
+    let (domain, key, value) = (CFString::new("com.nematode.app"), CFString::new("icon"), CFString::new(id));
+    unsafe {
+        CFPreferencesSetAppValue(key.as_concrete_TypeRef(), value.as_CFTypeRef(), domain.as_concrete_TypeRef());
+        CFPreferencesAppSynchronize(domain.as_concrete_TypeRef());
+    }
+    autoreleasepool(|_| unsafe {
+        let center: *mut AnyObject = msg_send![class!(NSDistributedNotificationCenter), defaultCenter];
+        let name = CFString::new("com.nematode.app.iconChanged");
+        let _: () = msg_send![center, postNotificationName: name.as_concrete_TypeRef() as *mut AnyObject,
+            object: std::ptr::null_mut::<AnyObject>(), userInfo: std::ptr::null_mut::<AnyObject>(), deliverImmediately: true];
+    });
 }
