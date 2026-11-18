@@ -43,7 +43,7 @@ const ICONS: [(&str, &str, &[u8], &[u8]); 4] = [
     ("pinkblue", "Pink & Blue", include_bytes!("../icons/variants/pinkblue.png"), include_bytes!("../icons/variants/pinkblue-menu.png")),
     ("acid", "Acid", include_bytes!("../icons/variants/acid.png"), include_bytes!("../icons/variants/acid-menu.png")),
     ("halftone", "Halftone", include_bytes!("../icons/variants/halftone.png"), include_bytes!("../icons/variants/halftone-menu.png")),
-    ("warhol", "Warhol", include_bytes!("../icons/variants/warhol.png"), include_bytes!("../icons/variants/warhol-menu.png")),
+    ("purple", "Purple", include_bytes!("../icons/variants/purple.png"), include_bytes!("../icons/variants/purple-menu.png")),
 ];
 
 fn main() {
@@ -102,12 +102,12 @@ fn main() {
                         let _ = login.set_checked(a.is_enabled().unwrap_or(on));
                     }
                     "quit" => app.exit(0),
-                    id if id.starts_with("icon:") => set_icon(app, &id[5..]),
+                    id if id.starts_with("icon:") => set_icon(app, &id[5..], true),
                     _ => {}
                 })
                 .build(app)?;
 
-            set_icon(app.handle(), chosen); // re-applies after updates, which replace the bundle
+            set_icon(app.handle(), chosen, false); // re-applies after updates, which replace the bundle
 
             #[cfg(target_os = "macos")]
             if !mac::trusted(false) {
@@ -156,7 +156,7 @@ fn icon_choice_file(app: &AppHandle) -> std::path::PathBuf {
 
 /// Switches the app icon: on macOS the Finder/Launchpad/Applications icon, on Windows the tray icon
 /// (the only icon Nematode shows there). Remembers the choice and ticks it in the menu.
-fn set_icon(app: &AppHandle, id: &str) {
+fn set_icon(app: &AppHandle, id: &str, from_menu: bool) {
     let Some(&(id, _, full, preview)) = ICONS.iter().find(|i| i.0 == id) else { return };
     let file = icon_choice_file(app);
     let _ = std::fs::create_dir_all(file.parent().unwrap());
@@ -164,11 +164,11 @@ fn set_icon(app: &AppHandle, id: &str) {
     #[cfg(target_os = "macos")]
     {
         let _ = preview;
-        mac::set_app_icon((id != ICONS[0].0).then_some(full)); // default: drop the override, use the bundle's own
+        mac::set_app_icon((id != ICONS[0].0).then_some(full), from_menu); // default: drop the override, use the bundle's own
     }
     #[cfg(windows)]
     {
-        let _ = full;
+        let _ = (full, from_menu);
         if let (Some(tray), Ok(img)) = (app.tray_by_id("tray"), Image::from_bytes(preview)) {
             let _ = tray.set_icon(Some(img));
         }

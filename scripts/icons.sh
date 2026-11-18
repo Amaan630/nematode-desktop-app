@@ -8,7 +8,7 @@ shot() { "$CHROME" --headless --disable-gpu --hide-scrollbars --force-device-sca
   --default-background-color=00000000 --window-size=1024,1024 --screenshot="$2" "file://$PWD/scripts/icon.html?$1" 2>/dev/null; }
 mkdir -p build src-tauri/icons/variants
 
-for v in pinkblue acid halftone warhol; do
+for v in pinkblue acid halftone purple; do
   shot "v=$v" "build/icon-$v.png"
   sips -Z 512 "build/icon-$v.png" --out "src-tauri/icons/variants/$v.png" >/dev/null   # applied as the app icon
   sips -Z 64 "build/icon-$v.png" --out "src-tauri/icons/variants/$v-menu.png" >/dev/null # menu preview (shown at 18pt)

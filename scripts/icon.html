@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Renders icons for scripts/icons.sh: ?v=pinkblue|acid|halftone|warhol (app icons) or ?tray (menu bar). -->
+<!-- Renders icons for scripts/icons.sh: ?v=pinkblue|acid|halftone|purple (app icons) or ?tray (menu bar). -->
 <style>html, body { margin: 0; background: transparent }</style>
 <canvas width="1024" height="1024"></canvas>
 <script src="../src/nematode.js"></script>
@@ -66,10 +66,7 @@ const variants = {
       if (r > .5) { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); }
     }
   },
-  warhol: () => [['#1b1bff', '#ff5fa2'], ['#121212', '#f4ff3a'], ['#d81e1e', '#7cf0ff'], ['#3b0a6b', '#ff9a2e']]
-    .forEach(([ink, paper], k) => pixels(
-      dither(source(72, .45, [.55, .45, .55, .45][k], [.79, .79, .73, .73][k]), ink, paper),
-      (k % 2) * 512, Math.floor(k / 2) * 512, 512)),
+  purple: () => pixels(dither(source(120), '#3b0a6b', '#ff9a2e'), 0, 0, 1024),
 };
 
 if (q.has('tray')) {

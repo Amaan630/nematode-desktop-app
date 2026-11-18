@@ -133,7 +133,8 @@ pub fn float_above_menu_bar(ns_window: *mut c_void) {
 
 /// Sets (Some png) or clears (None) the custom Finder/Launchpad icon on this app's bundle.
 /// The code signature still validates and Accessibility stays granted (checked on a real install).
-pub fn set_app_icon(png: Option<&[u8]>) {
+/// `refresh_dock`: the Dock caches icons of pinned apps, so restart it (a brief flicker) when we're pinned.
+pub fn set_app_icon(png: Option<&[u8]>, refresh_dock: bool) {
     let bundle = std::env::current_exe().ok().and_then(|p| p.ancestors().nth(3).map(|b| b.to_path_buf()));
     let Some(bundle) = bundle.filter(|b| b.extension().is_some_and(|e| e == "app")) else { return }; // dev builds: no bundle
     let path = CFString::new(&bundle.to_string_lossy());
@@ -145,9 +146,24 @@ pub fn set_app_icon(png: Option<&[u8]>) {
             let alloc: *mut AnyObject = msg_send![class!(NSImage), alloc];
             img = msg_send![alloc, initWithData: data];
         }
-        let _: bool = msg_send![ws, setIcon: img, forFile: path.as_concrete_TypeRef() as *mut AnyObject, options: 0usize];
+        let ns_path = path.as_concrete_TypeRef() as *mut AnyObject;
+        let _: bool = msg_send![ws, setIcon: img, forFile: ns_path, options: 0usize];
         if !img.is_null() {
             let _: () = msg_send![img, release];
         }
-    })
+        let _: () = msg_send![ws, noteFileSystemChanged: ns_path]; // nudge Finder to re-read it
+    });
+    let _ = std::process::Command::new("touch").arg(&bundle).status(); // and invalidate cached icons
+    if refresh_dock && in_dock() {
+        let _ = std::process::Command::new("killall").arg("Dock").status(); // the Dock relaunches itself
+    }
+}
+
+/// Is Nematode pinned in the Dock?
+fn in_dock() -> bool {
+    std::process::Command::new("defaults")
+        .args(["read", "com.apple.dock", "persistent-apps"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains("com.nematode.app"))
+        .unwrap_or(false)
 }

@@ -19,14 +19,14 @@
 - **Finds your Claude tab.** Switch to claude.ai in Chrome and he walks in from the left and stomps on that exact tab, whether your tabs run along the top or down the side.
 - **Comes when called.** Choose **Summon Nematode** from the menu bar and he hangs out above your Dock, wandering around and sometimes running from your cursor. **Dismiss** sends him away.
 - **Can be thrown.** Grab him and fling him around. He tumbles, bounces off the edges of your screen, picks himself up and walks back.
-- **Has four looks.** Choose one under **App Icon** in the menu bar: Pink & Blue, Acid, Halftone or Warhol.
+- **Has four looks.** Choose one under **App Icon** in the menu bar: Pink & Blue, Acid, Halftone or Purple.
 - **Stays out of the way.** He lives in the menu bar, opens at login and updates himself.
 
 <p align="center">
   <img src="build/icon-pinkblue.png" width="96" alt="Pink & Blue icon">
   <img src="build/icon-acid.png" width="96" alt="Acid icon">
   <img src="build/icon-halftone.png" width="96" alt="Halftone icon">
-  <img src="build/icon-warhol.png" width="96" alt="Warhol icon">
+  <img src="build/icon-purple.png" width="96" alt="Purple icon">
 </p>
 
 ## Install
