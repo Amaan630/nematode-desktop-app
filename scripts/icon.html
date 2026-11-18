@@ -1,20 +1,25 @@
 <!doctype html>
-<!-- Renders the app icon (?icon) or the tray icon (?tray) for scripts/icons.sh -->
+<!-- Renders the app icon (?icon) or the tray icon (?tray) for scripts/icons.sh. ?icon&bg=a,b previews other colors. -->
 <style>html, body { margin: 0; background: transparent }</style>
 <canvas width="1024" height="1024"></canvas>
 <script src="../src/nematode.js"></script>
 <script>
 const c = document.querySelector('canvas'), x = c.getContext('2d');
-if (location.search === '?tray') {
+const q = new URLSearchParams(location.search);
+if (q.has('tray')) {
   drawNematode(x, { x: 512, ground: 1000, scale: 1000, face: -1 });
 } else {
-  const m = 100, s = 824;  // macOS icon grid: 824px tile centered in 1024
-  const g = x.createRadialGradient(512, 380, 60, 512, 512, 620);
-  g.addColorStop(0, '#3f8172'); g.addColorStop(1, '#173a33');
-  x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = 28; x.shadowOffsetY = 12;
-  x.beginPath(); x.roundRect(m, m, s, s, 185); x.fillStyle = g; x.fill();
-  x.shadowColor = 'transparent';
-  x.beginPath(); x.ellipse(512, 818, 170, 26, 0, 0, 7); x.fillStyle = 'rgba(0,0,0,.22)'; x.fill();
-  drawNematode(x, { x: 512, ground: 812, scale: 600, face: -1 });
+  // macOS icon grid: an 824px squircle centered in 1024. Flat fill, no baked-in shadow (the system adds one).
+  const [top, bottom] = (q.get('bg') || '#4a6f94,#33506e').split(',');
+  const sq = new Path2D(), n = 4.2, r = 412;
+  for (let i = 0; i <= 360; i++) {
+    const a = i / 360 * 2 * Math.PI, ca = Math.cos(a), sa = Math.sin(a);
+    const px = 512 + r * Math.sign(ca) * Math.abs(ca) ** (2 / n), py = 512 + r * Math.sign(sa) * Math.abs(sa) ** (2 / n);
+    i ? sq.lineTo(px, py) : sq.moveTo(px, py);
+  }
+  const g = x.createLinearGradient(0, 100, 0, 924);
+  g.addColorStop(0, top); g.addColorStop(1, bottom);
+  x.fillStyle = g; x.fill(sq);
+  drawNematode(x, { x: 512, ground: 862, scale: 640, face: -1 });
 }
 </script>
