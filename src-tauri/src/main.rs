@@ -12,6 +12,7 @@ use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_updater::UpdaterExt;
 
 type Rect = (f64, f64, f64, f64); // logical x, y, w, h
 
@@ -39,6 +40,7 @@ static SUMMON: OnceLock<MenuItem<Wry>> = OnceLock::new();
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![cursor, set_grabbable, release, status, request_accessibility, close_setup])
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -90,6 +92,15 @@ fn main() {
                 setup_window(app.handle());
             }
 
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                // Check GitHub for a newer release at launch, then once a day.
+                if let Err(e) = tauri::async_runtime::block_on(update(&handle)) {
+                    eprintln!("update check failed: {e}");
+                }
+                std::thread::sleep(Duration::from_secs(24 * 60 * 60));
+            });
+
             std::thread::spawn(move || loop {
                 std::thread::sleep(Duration::from_millis(250));
                 if let Some(spot) = locate() {
@@ -105,6 +116,16 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error running Nematode");
+}
+
+/// Downloads and installs a newer release if there is one, then relaunches once he's off screen.
+async fn update(app: &AppHandle) -> tauri_plugin_updater::Result<()> {
+    let Some(update) = app.updater()?.check().await? else { return Ok(()) };
+    update.download_and_install(|_, _| {}, || {}).await?;
+    while mode(&STATE.lock().unwrap()) != Mode::Away {
+        std::thread::sleep(Duration::from_secs(30)); // don't yank him off screen mid-stomp
+    }
+    app.restart();
 }
 
 // Locking rule: never call into Tauri (monitors, window, menu, eval) while holding STATE.

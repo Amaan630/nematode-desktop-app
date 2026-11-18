@@ -1,13 +1,17 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Nematode",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "identifier": "com.nematode.app",
-  "build": { "frontendDist": "../src" },
+  "build": {
+    "frontendDist": "../src"
+  },
   "app": {
     "macOSPrivateApi": true,
     "withGlobalTauri": true,
-    "security": { "csp": null },
+    "security": {
+      "csp": null
+    },
     "windows": [
       {
         "label": "main",
@@ -29,8 +33,30 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg", "nsis"],
+    "targets": [
+      "app",
+      "dmg",
+      "nsis"
+    ],
     "category": "Entertainment",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBRUM0MDkwRDMwQTYwNkYKUldSdllBclRrRURzbXJwMGtjd0RuUHRhZmxXQ0ZDZ1doeHFNekhXbTgveVR2cVdIcU1XZEVVdlMK",
+      "endpoints": [
+        "https://github.com/Amaan630/nematode-desktop-app/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
