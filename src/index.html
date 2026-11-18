@@ -4,6 +4,7 @@
 <style>html, body { margin: 0; background: transparent; overflow: hidden; user-select: none } canvas { display: block }</style>
 <canvas></canvas>
 <script src="nematode.js"></script>
+<script src="croissant.js"></script>
 <script>
 const SIZE = 64;       // px per body length (he's roughly this tall)
 const SPEED = 210;     // walking px/s
@@ -11,6 +12,14 @@ const STEP_HZ = 3.2;   // wiggle cycles per second while walking
 const STOMP = 0.62, STOMPS = 3, REST = 1.4;  // 3 stomps, then a breather
 const G = 2600, BOUNCE = 0.5;                // throw physics: gravity px/s², wall bounciness
 const OFF = -SIZE;     // just past the left edge
+const CROISSANT_SIZE = 70, CROISSANT_HZ = 2.2;  // croissant: px per unit (~98px wide), waddle cycles per second
+
+// Which character is out: set by the app (menu bar > Character) or ?char= in the browser preview.
+let character = new URLSearchParams(location.search).get('char') || 'nematode';
+function setCharacter(c) { character = c === 'croissant' ? 'croissant' : 'nematode'; }
+window.__TAURI__?.core.invoke('get_character').then(setCharacter).catch(() => {});
+const jig = new CroissantJiggle();
+let prevPos = null, prevVel = [0, 0];
 
 const tauri = window.__TAURI__?.core;
 const cv = document.querySelector('canvas'), ctx = cv.getContext('2d');
@@ -109,7 +118,7 @@ function puff(n_ = 10) {
 }
 function drawDust(dt) {
   dust = dust.filter(d => (d.life -= dt * 2) > 0);
-  ctx.fillStyle = '#b9a35e';
+  ctx.fillStyle = character === 'croissant' ? '#d9964d' : '#b9a35e'; // crumbs or dirt
   for (const d of dust) {
     d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 80 * dt;
     ctx.globalAlpha = d.life; ctx.beginPath(); ctx.arc(d.x, d.y, d.r * (2 - d.life), 0, 7); ctx.fill();
@@ -150,13 +159,18 @@ function frame(now) {
 }
 
 function tick(now) {
-  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  const dt = Math.max(.001, Math.min(.05, (now - last) / 1000)); last = now; // never 0: speeds divide by it
   if (n.state === 'walk') {
     // Inchworm-ish gait: a wave ripples up the body and each ripple surges him forward.
     const tx = goal().x, dir = Math.sign(tx - n.x), fast = n.fleeing ? 2.3 : 1;
     n.face = dir || n.face;
-    n.phase = (n.phase + dt * STEP_HZ * (n.fleeing ? 1.8 : 1)) % 1;
-    n.x += dir * SPEED * fast * dt * (.45 + .85 * Math.max(0, Math.sin(2 * Math.PI * n.phase)));
+    if (character === 'croissant') { // steady waddle
+      n.phase = (n.phase + dt * CROISSANT_HZ * (n.fleeing ? 1.6 : 1)) % 1;
+      n.x += dir * SPEED * .75 * fast * dt;
+    } else {                         // inchworm surge
+      n.phase = (n.phase + dt * STEP_HZ * (n.fleeing ? 1.8 : 1)) % 1;
+      n.x += dir * SPEED * fast * dt * (.45 + .85 * Math.max(0, Math.sin(2 * Math.PI * n.phase)));
+    }
     if (!dir || Math.sign(tx - n.x) !== dir) {
       n.x = tx;
       if (n.fleeing) Object.assign(n, { fleeing: false, wasNear: false }); // still close? he may bolt again
@@ -183,9 +197,25 @@ function tick(now) {
   else if (n.state === 'fly') Object.assign(pose, { stretch: 1 - n.squash, curl: 1 + n.squash, mouth: 1.15 });
 
   ctx.clearRect(0, 0, innerWidth, innerHeight);
-  hit = n.state === 'gone' ? null : drawNematode(ctx, pose);
+  if (n.state === 'gone') { hit = null; prevPos = null; }
+  else if (character === 'croissant') hit = drawCroissant(ctx, croissantPose(pose, dt, now));
+  else hit = drawNematode(ctx, pose);
   drawDust(dt);
   pollCursor();
+}
+
+// The same moment, as the croissant: stretch becomes squash, hops lift him, his ends jiggle with
+// his body's acceleration, and his legs paddle while you hold him.
+function croissantPose(pose, dt, now) {
+  const v = prevPos ? [(n.x - prevPos[0]) / dt, (n.y - prevPos[1]) / dt] : [0, 0];
+  const acc = [(v[0] - prevVel[0]) / dt, (v[1] - prevVel[1]) / dt];
+  prevPos = [n.x, n.y]; prevVel = v;
+  return {
+    x: n.x, ground: n.y - (pose.hop || 0), scale: CROISSANT_SIZE, face: n.face, rot: n.rot,
+    walk: n.state === 'walk' ? 1 : n.state === 'held' ? .7 : 0, phase: n.phase,
+    squash: 1 - (pose.stretch ?? 1), blink: (now / 1000) % 3.7 < .12 ? 1 : 0,
+    jiggle: jig.step(dt, acc[0] * n.face, acc[1], CROISSANT_SIZE),
+  };
 }
 
 // --- Grabbing -------------------------------------------------------------------------------

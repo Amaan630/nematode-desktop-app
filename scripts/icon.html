@@ -1,8 +1,10 @@
 <!doctype html>
-<!-- Renders icons for scripts/icons.sh: ?v=pinkblue|acid|halftone|purple (app icons) or ?tray (menu bar). -->
+<!-- Renders icons for scripts/icons.sh: ?v=pinkblue|acid|halftone|purple (app icons), ?tray (menu bar),
+     ?char=nematode|croissant (Character menu previews). -->
 <style>html, body { margin: 0; background: transparent }</style>
 <canvas width="1024" height="1024"></canvas>
 <script src="../src/nematode.js"></script>
+<script src="../src/croissant.js"></script>
 <script>
 const out = document.querySelector('canvas'), ctx = out.getContext('2d');
 const q = new URLSearchParams(location.search);
@@ -69,7 +71,11 @@ const variants = {
   purple: () => pixels(dither(source(120), '#3b0a6b', '#ff9a2e'), 0, 0, 1024),
 };
 
-if (q.has('tray')) {
+if (q.get('char') === 'nematode') {
+  drawNematode(ctx, { x: 512, ground: 950, scale: 860, face: -1 });
+} else if (q.get('char') === 'croissant') {
+  drawCroissant(ctx, { x: 512, ground: 830, scale: 700, face: 1 });
+} else if (q.has('tray')) {
   drawNematode(ctx, { x: 512, ground: 1000, scale: 1000, face: -1 });
 } else {
   ctx.save(); ctx.clip(squircle());

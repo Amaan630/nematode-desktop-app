@@ -37,6 +37,14 @@ static STATE: Mutex<State> = Mutex::new(State {
 });
 static SUMMON: OnceLock<MenuItem<Wry>> = OnceLock::new();
 static ICON_ITEMS: OnceLock<Vec<IconMenuItem<Wry>>> = OnceLock::new();
+static CHAR_ITEMS: OnceLock<Vec<IconMenuItem<Wry>>> = OnceLock::new();
+static CHARACTER: Mutex<&str> = Mutex::new("nematode");
+
+/// Characters: id, name, menu preview. The first is the default.
+const CHARACTERS: [(&str, &str, &[u8]); 2] = [
+    ("nematode", "Nematode", include_bytes!("../icons/characters/nematode-menu.png")),
+    ("croissant", "Croissant", include_bytes!("../icons/characters/croissant-menu.png")),
+];
 
 /// Switchable app icons: id, menu label, the icon itself, its menu preview. The first is the bundle's default.
 const ICONS: [(&str, &str, &[u8], &[u8]); 4] = [
@@ -58,7 +66,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![cursor, set_grabbable, release, status, request_accessibility, close_setup])
+        .invoke_handler(tauri::generate_handler![cursor, set_grabbable, release, status, request_accessibility, close_setup, get_character])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory); // no dock icon
@@ -92,10 +100,19 @@ fn main() {
             }
             let refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = icon_items.iter().map(|i| i as _).collect();
             let icons = Submenu::with_items(app, "App Icon", true, &refs)?;
+            let char_chosen = std::fs::read_to_string(choice_file(app.handle(), "character")).unwrap_or_default();
+            let char_chosen = CHARACTERS.iter().find(|c| c.0 == char_chosen).map_or(CHARACTERS[0].0, |c| c.0);
+            let mut char_items = vec![];
+            for (id, name, preview) in CHARACTERS {
+                char_items.push(IconMenuItem::with_id(app, format!("char:{id}"), name, true, Some(Image::from_bytes(preview)?), None::<&str>)?);
+            }
+            let refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = char_items.iter().map(|i| i as _).collect();
+            let characters = Submenu::with_items(app, "Character", true, &refs)?;
             let sep2 = PredefinedMenuItem::separator(app)?;
-            let menu = Menu::with_items(app, &[&summon, &sep, &icons, &login, &sep2, &quit])?;
+            let menu = Menu::with_items(app, &[&summon, &sep, &characters, &icons, &login, &sep2, &quit])?;
             let _ = SUMMON.set(summon);
             let _ = ICON_ITEMS.set(icon_items);
+            let _ = CHAR_ITEMS.set(char_items);
             TrayIconBuilder::with_id("tray")
                 .icon(Image::from_bytes(include_bytes!("../icons/tray.png"))?)
                 .tooltip("Nematode")
@@ -111,11 +128,13 @@ fn main() {
                     }
                     "quit" => app.exit(0),
                     id if id.starts_with("icon:") => set_icon(app, &id[5..]),
+                    id if id.starts_with("char:") => set_character(app, &id[5..]),
                     _ => {}
                 })
                 .build(app)?;
 
             set_icon(app.handle(), chosen); // re-applies after updates, which replace the bundle
+            set_character(app.handle(), char_chosen);
 
             #[cfg(target_os = "macos")]
             if !mac::trusted(false) {
@@ -159,7 +178,37 @@ async fn update(app: &AppHandle) -> tauri_plugin_updater::Result<()> {
 }
 
 fn icon_choice_file(app: &AppHandle) -> std::path::PathBuf {
-    app.path().app_data_dir().unwrap_or_default().join("icon")
+    choice_file(app, "icon")
+}
+
+fn choice_file(app: &AppHandle, name: &str) -> std::path::PathBuf {
+    app.path().app_data_dir().unwrap_or_default().join(name)
+}
+
+/// Swaps who's on screen: remembers it, ticks it in the menu, renames Summon/Dismiss, tells the overlay.
+fn set_character(app: &AppHandle, id: &str) {
+    let Some(&(id, name, _)) = CHARACTERS.iter().find(|c| c.0 == id) else { return };
+    let file = choice_file(app, "character");
+    let _ = std::fs::create_dir_all(file.parent().unwrap());
+    let _ = std::fs::write(file, id);
+    *CHARACTER.lock().unwrap() = id;
+    if let Some(items) = CHAR_ITEMS.get() {
+        for (item, (cid, cname, _)) in items.iter().zip(CHARACTERS) {
+            let _ = item.set_text(if cid == id { format!("{cname}  ✓") } else { cname.to_string() });
+        }
+    }
+    if let Some(item) = SUMMON.get() {
+        let m = mode(&STATE.lock().unwrap());
+        let _ = item.set_text(format!("{} {name}", if m == Mode::Summoned { "Dismiss" } else { "Summon" }));
+    }
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.eval(&format!("setCharacter('{id}')"));
+    }
+}
+
+#[tauri::command]
+fn get_character() -> String {
+    CHARACTER.lock().unwrap().to_string()
 }
 
 /// Switches the app icon: on macOS in Finder/Launchpad and the Dock, on Windows the tray icon and
@@ -274,7 +323,8 @@ fn sync(win: &WebviewWindow) {
     }
     let _ = win.eval(&js);
     if let Some(item) = SUMMON.get() {
-        let _ = item.set_text(if m == Mode::Summoned { "Dismiss Nematode" } else { "Summon Nematode" });
+        let name = CHARACTERS.iter().find(|c| c.0 == *CHARACTER.lock().unwrap()).map_or("Nematode", |c| c.1);
+        let _ = item.set_text(format!("{} {name}", if m == Mode::Summoned { "Dismiss" } else { "Summon" }));
         let _ = item.set_enabled(m != Mode::OnTab);
     }
 }

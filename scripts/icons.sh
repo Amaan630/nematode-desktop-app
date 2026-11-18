@@ -18,6 +18,12 @@ for v in pinkblue acid halftone purple; do
 done
 cp build/icon-pinkblue.png build/icon.png
 
+mkdir -p src-tauri/icons/characters                                                       # Character menu previews
+for c in nematode croissant; do
+  shot "char=$c" "build/char-$c.png"
+  sips -Z 64 "build/char-$c.png" --out "src-tauri/icons/characters/$c-menu.png" >/dev/null
+done
+
 shot tray build/tray-full.png
 sips -Z 64 build/tray-full.png --out src-tauri/icons/tray.png >/dev/null
 npx tauri icon build/icon.png -o src-tauri/icons >/dev/null 2>&1
