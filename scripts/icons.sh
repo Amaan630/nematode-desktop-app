@@ -36,3 +36,7 @@ rm -rf src-tauri/icons/ios src-tauri/icons/android src-tauri/icons/Square*.png s
 "$CHROME" --headless --hide-scrollbars --force-device-scale-factor=1 --window-size=540,380 --screenshot="$PWD/build/dmg-background.png" "file://$PWD/scripts/dmg-background.html" 2>/dev/null
 "$CHROME" --headless --hide-scrollbars --force-device-scale-factor=2 --window-size=540,380 --screenshot="$PWD/build/dmg-background@2x.png" "file://$PWD/scripts/dmg-background.html" 2>/dev/null
 tiffutil -cathidpicheck build/dmg-background.png build/dmg-background@2x.png -out build/dmg-background.tiff >/dev/null
+
+# Link-preview card for the site (CI renders its own copy on every deploy; this one is for looking at)
+"$CHROME" --headless --hide-scrollbars --allow-file-access-from-files --force-device-scale-factor=1 --window-size=1200,630 \
+  --virtual-time-budget=800 --screenshot="$PWD/build/og.png" "file://$PWD/scripts/og-card.html" 2>/dev/null

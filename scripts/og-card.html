@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- The site's link-preview card (1200x630). Rendered fresh from the current characters on every site deploy
+     (.github/workflows/pages.yml), so previews never go stale. Locally: npm run icons writes build/og.png. -->
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #ffc9d9;
+               font-family: system-ui, -apple-system, sans-serif; color: #9c2552 }
+  h1 { position: absolute; left: 90px; top: 150px; margin: 0; font-size: 120px; letter-spacing: -.035em; line-height: 1 }
+  p { position: absolute; left: 96px; top: 300px; margin: 0; font-size: 38px; opacity: .8; width: 520px; line-height: 1.25 }
+  .pill { position: absolute; left: 96px; top: 440px; background: #fff7ec; border-radius: 22px; padding: 20px 34px;
+          font-size: 30px; font-weight: 700; box-shadow: 0 3px 14px rgba(156, 37, 82, .16) }
+  canvas { position: absolute; left: 0; top: 0 }
+</style>
+<h1>Nematode</h1>
+<p>A little buddy who stomps on your Claude tab.</p>
+<div class="pill">For Mac and Windows</div>
+<canvas width="2400" height="1260" style="width:1200px;height:630px"></canvas>
+<script>const CHARACTERS = {};</script>
+<script src="../src/characters/nematode.js"></script>
+<script src="../src/characters/croissant.js"></script>
+<script>
+const x = document.querySelector('canvas').getContext('2d'); x.scale(2, 2);
+const idle = { state: 'idle', phase: 0, t: 0, stretch: 1, hop: 0, crouch: 0, impact: 0, airborne: false };
+const at = (px, ground, zoom, face) => ({ x: px, ground, face, rot: 0, accel: [0, 0], dt: 1 / 60, now: 1000, zoom }); // eyes open
+// A cream floor for the two of them to stand on.
+x.fillStyle = '#fff7ec'; x.beginPath(); x.ellipse(905, 520, 250, 36, 0, 0, 7); x.fill();
+CHARACTERS.nematode.draw(x, at(780, 520, 4.3, 1), idle);
+CHARACTERS.croissant.draw(x, at(990, 520, 2.6, -1), idle);
+</script>
