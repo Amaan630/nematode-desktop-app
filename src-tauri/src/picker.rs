@@ -45,7 +45,7 @@ impl Picker {
             .iter()
             .map(|c| {
                 let id = format!("{}:{}", self.key, c.id);
-                IconMenuItem::with_id(app, id, c.label, true, Some(Image::from_bytes(c.preview)?), None::<&str>)
+                IconMenuItem::with_id(app, id, c.label, true, if c.preview.is_empty() { None } else { Some(Image::from_bytes(c.preview)?) }, None::<&str>)
             })
             .collect::<tauri::Result<Vec<_>>>()?;
         let refs: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(|i| i as _).collect();

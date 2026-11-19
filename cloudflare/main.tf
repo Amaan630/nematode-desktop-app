@@ -24,6 +24,12 @@ variable "name" {
   default = "nematode-buddies"
 }
 
+# Only the first deployment creates the Durable Object namespace. Repeating that migration fails.
+variable "initialize_live_hub" {
+  type    = bool
+  default = false
+}
+
 resource "cloudflare_d1_database" "buddies" {
   account_id       = var.account_id
   name             = var.name
@@ -38,7 +44,7 @@ resource "cloudflare_workers_script" "buddies" {
   content_file       = "${path.module}/worker.mjs"
   content_sha256     = filesha256("${path.module}/worker.mjs")
   compatibility_date = "2025-09-01"
-  migrations         = { new_tag = "live-v1", new_sqlite_classes = ["LiveHub"] }
+  migrations         = var.initialize_live_hub ? { new_tag = "live-v1", new_sqlite_classes = ["LiveHub"] } : null
   bindings = [{
     name = "DB"
     type = "d1"

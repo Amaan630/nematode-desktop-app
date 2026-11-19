@@ -1,0 +1,10 @@
+{
+  "build": { "frontendDist": "http://127.0.0.1:18765" },
+  "bundle": { "createUpdaterArtifacts": false },
+  "app": { "security": { "capabilities": [{
+    "identifier": "desktop-dev",
+    "windows": ["main"],
+    "remote": { "urls": ["http://127.0.0.1:18765/*"] },
+    "permissions": ["core:default"]
+  }] } }
+}

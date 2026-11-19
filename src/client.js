@@ -1,13 +1,18 @@
 // Addressed actions; the UI doesn't know how they're delivered. Supply a transport when pairing exists.
 class BuddyClient extends EventTarget {
-  constructor(id, transport = null) {
+  constructor(id, transport = null, appearance = null) {
     super();
     this.id = id;
     this.transport = transport;
+    this.appearance = appearance;
   }
 
   async send(to, action, payload = {}) {
     if ((!to && !this.transport) || !action) throw new Error('An action needs a recipient and a name.');
+    if (this.appearance) {
+      const appearance = structuredClone(this.appearance());
+      payload = { ...payload, character: appearance.character, appearance };
+    }
     const event = { id: crypto.randomUUID(), from: this.id, to, action, payload };
     // No configured backend: keep the browser and Debug previews local.
     if (!this.transport) return { status: 'preview', event };

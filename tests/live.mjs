@@ -13,14 +13,14 @@ const wait = async condition => {
   throw new Error('Timed out waiting for live delivery');
 };
 const requests = [], played = [], stores = [memory(),memory()];
-let active = true, offline = false, aliceCharacter = 'nematode';
+let active = true, offline = false, aliceCharacter = 'nematode', aliceHat = 'cap';
 const options = (storage, character) => ({ storage, character, isActive:async()=>active,
   fetch:async (...args)=>{ requests.push(args[0]); if(offline) throw new Error('offline'); return fetch(...args); },
   onGesture:(event,done)=>played.push({event,done}), onState:()=>{},
 });
-const alice = new CloudConnection(endpoint, options(stores[0],()=>aliceCharacter));
+const alice = new CloudConnection(endpoint, {...options(stores[0],()=>aliceCharacter),appearance:()=>({character:aliceCharacter,accessories:{hat:aliceHat}})});
 let bob = new CloudConnection(endpoint, options(stores[1],()=> 'croissant'));
-const event = action => ({id:crypto.randomUUID(),from:alice.state.id,to:bob.state.id,action,payload:{character:alice.character()}});
+const event = action => ({id:crypto.randomUUID(),from:alice.state.id,to:bob.state.id,action,payload:{character:alice.character(),appearance:alice.appearance()}});
 try {
   alice.start(); bob.start();
   await wait(()=>alice.socket?.readyState===1 && bob.socket?.readyState===1 && alice.peer && bob.peer);
@@ -37,6 +37,7 @@ try {
   await alice.send(heart);
   await wait(()=>played.some(p=>p.event.id===heart.id));
   assert.equal(played.at(-1).event.payload.character,'nematode');
+  assert.equal(played.at(-1).event.payload.appearance.accessories.hat,'cap');
   await played.at(-1).done();
   await wait(()=>bob.state.receipts.length===0 && !bob.running);
   // Reconnect the same identity and collect a gesture sent while the receiver was quit.
@@ -55,6 +56,7 @@ try {
   active=true; await wait(()=>played.some(p=>p.event.id===asleep.id));
   await played.at(-1).done();
   await alice.send(event('together')); await wait(()=>bob.state.together.active);
+  aliceHat='sunhat'; await wait(()=>bob.state.together.peer.appearance.accessories.hat==='sunhat');
   await alice.send(event('separate')); await wait(()=>!bob.state.together.active);
   aliceCharacter='croissant'; await wait(()=>bob.peer?.character==='croissant');
   // A stale connection after sleep is replaced, then sync catches any missed notifications.

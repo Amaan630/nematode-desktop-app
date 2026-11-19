@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><title>Hat studies</title>
+<style>@font-face{font-family:Lilita;src:url('../src/fonts/LilitaOne-Regular.ttf')}body{margin:0;background:#fff7ec;color:#85324e;font-family:Lilita}h1{margin:30px 40px 4px;font-size:28px}p{margin:0 40px;font:15px system-ui}canvas{display:block}</style>
+<h1>A little something on top</h1><p>Four hats, on both characters. Large studies above; actual desktop size below.</p><canvas width="1000" height="530"></canvas>
+<script>const CHARACTERS={};</script><script src="../src/hats.js"></script><script src="../src/characters/nematode.js"></script><script src="../src/characters/croissant.js"></script>
+<script>
+const ctx=document.querySelector('canvas').getContext('2d');
+document.fonts.load('18px Lilita').then(()=>{
+const hats=Object.entries(HATS).filter(([id])=>id!=='none');
+hats.forEach(([hat,info],i)=>{
+ const x=120+i*240;
+ ctx.fillStyle='#85324e';ctx.font='20px Lilita';ctx.textAlign='center';ctx.fillText(info.name,x,45);
+ for(const [j,c] of Object.values(CHARACTERS).entries()) {
+   for(const [ground,zoom] of [[240,1.8],[390,1]]) {
+     c.draw(ctx,{x:x+(j?52:-52),ground,face:1,rot:0,accel:[0,0],dt:.016,now:1000,zoom,hat},
+      {state:'idle',phase:0,t:0,stretch:1,hop:0,crouch:0,impact:0,airborne:false});
+   }
+ }
+});
+});
+</script>

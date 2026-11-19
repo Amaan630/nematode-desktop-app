@@ -117,7 +117,7 @@ menu to see a different character walk in, give a gold heart, and leave. This te
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit, then tag it:
 
 ```bash
-git tag v0.3.8 && git push --tags
+git tag v0.3.9 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.
@@ -128,3 +128,9 @@ The deployed app registers itself automatically and sends to the first other reg
 codes or setup screens. Hearts and messages wait for the other person to return; Together/Separate restores
 the latest shared state. [Cloudflare setup and tests](cloudflare/README.md) are developer-only, using Terraform.
 The backend is deployed; this checkout includes its public endpoint. Release 0.3.8 uses live WebSocket notifications; older polling clients remain compatible.
+
+## Fast desktop UI testing
+
+Run `npm run desktop-dev` on your Mac. It temporarily runs a development copy on your actual desktop; saving UI files reloads it immediately. Ctrl+C or Quit restores your installed app. [Instructions and behavior](docs/desktop-development.md).
+
+The Hat menu offers a pink beret, blue baseball cap, cream beanie, and ribbon sun hat for either character. Shared appearances include hats; visiting gestures retain the sent outfit and Together follows live outfit changes.

@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 shot() { "$CHROME" --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
   --default-background-color=00000000 --window-size=1024,1024 --screenshot="$2" "file://$PWD/scripts/icon.html?$1" 2>/dev/null; }
+node scripts/hat-icons.mjs
 mkdir -p build src-tauri/icons/variants src-tauri/icons/characters
 
 # One app icon: build/icon-<name>.png (1024) -> variants/<name>.png (applied), -menu.png (18pt preview), .ico (Windows).

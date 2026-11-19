@@ -409,3 +409,32 @@ the owner's Cloudflare account/token. Do not put Cloudflare credentials in the a
 configuration is the public Worker URL. Debug previews and browser demo mode stay offline.
 
 Fan labels cannot be selected. Press-drag transfers the highlighted segment; release selects the segment under the pointer, and release outside cancels the press. Keyboard selection remains supported.
+
+## Desktop UI development and hats
+
+Use `npm run desktop-dev` for UI work on the actual Mac desktop. Read `docs/desktop-development.md`.
+It builds/signs a separate debug bundle, loads `src/` from loopback, pauses the installed app, and restores it
+on Ctrl+C or Quit. UI edits reload without rebuilding; Rust/menu edits require restarting the command.
+The `desktop-dev` feature disables auto-updates and system preference changes, and uses separate saved choices.
+Dev networking is local-only; never accidentally register the dev origin as a third production user.
+`overlay_ready` restores native presence after reload. `tests/desktop-dev.mjs` covers the server/reload contract.
+
+The Hat menu offers: No hat, Pink beret, Blue baseball cap, Cloud beanie, Ribbon sun hat.
+`src/hats.js` is the drawing registry, `src-tauri/src/hats.rs` is the remembered native picker. Each character
+attaches the drawing to its real head transform and adds the hat to its hit outline. The default drawing
+without a hat remains unchanged (site/icons use no hat). `scripts/hats.html` renders both characters wearing
+all options; `tests/social.mjs` checks mirrored/rotated hat hit areas at Retina scale. Hats are included in shared appearances.
+
+
+Shared appearance lives in `src/appearance.js`: resident, visitor, Together and tray use the same dressed
+character instance contract. `BuddyClient` automatically snapshots all appearance fields for every action;
+`CloudConnection` sends the same object as the profile. Never add per-gesture hat handling. The Worker stores
+bounded JSON in `clients.appearance` and `actions.appearance`, with legacy bare-character fallbacks. Existing
+D1 databases need the additive `cloudflare/migrations/0002_appearance.sql` before this Worker version deploys.
+The production migration preserves old users/actions and was applied on 2026-11-19. Together profile changes
+update in place; queued gestures keep their original appearance. The server retains unknown future fields.
+Hat menu icons come from `npm run icons:hats` (also part of `npm run icons`); the tray uses the same live drawing.
+
+The blue baseball cap uses dark blue ink (`#173b78`) for every outline and seam, specified by its `ink` field in the hat registry.
+
+Release 0.3.9 includes shared appearances, four hats with menu previews, and the documented desktop-dev launcher. Production builds omit the desktop-dev feature and retain normal auto-updates.

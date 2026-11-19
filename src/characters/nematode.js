@@ -8,6 +8,7 @@ const NEMA_BANDS = [[0, .16, 'light'], [.16, .3, 'dark'], [.3, .42, 'light'], [.
 const nemaEase = (a, b, s) => { const k = Math.min(1, Math.max(0, (s - a) / (b - a))); return k * k * (3 - 2 * k); };
 
 function drawNematode(ctx, p) {
+  const canvasTransform = ctx.getTransform();
   const N = 120, S = p.scale, face = p.face ?? 1, curl = p.curl ?? 1, st = p.stretch ?? 1;
   const wave = p.wave ?? 0, ph = p.phase ?? 0, C = NEMA_COLORS;
 
@@ -96,6 +97,13 @@ function drawNematode(ctx, p) {
   path([...lip, at(.82, -.5), at(.865, -.5)]); ctx.fillStyle = C.light; ctx.fill();
   path(lip, true); ctx.lineWidth = Math.max(2, 0.03 * S); ctx.strokeStyle = C.line; ctx.stroke();
   ctx.restore();
+  if (p.hat && typeof drawHat === 'function') {
+    const head = map([pts[N][0] + T[N][0] * W[N] * .28, pts[N][1] + T[N][1] * W[N] * .28]);
+    const neck = map(pts[N - 1]), tip = map(pts[N]);
+    ctx.save(); ctx.translate(...head); ctx.rotate(Math.atan2(tip[1] - neck[1], tip[0] - neck[0]) + Math.PI / 2);
+    ctx.scale(face * S / 80, S / 80);
+    hit.addPath(drawHat(ctx, p.hat), canvasTransform.inverse().multiply(ctx.getTransform())); ctx.restore();
+  }
   return hit; // body outline in screen space, for hit-testing
 }
 
@@ -105,7 +113,7 @@ if (typeof CHARACTERS !== 'undefined') CHARACTERS.nematode = {
   // Inchworm gait: each ripple up the body surges him forward.
   gait: { hz: 3.2, pace: phase => .45 + .85 * Math.max(0, Math.sin(2 * Math.PI * phase)) },
   draw(ctx, at, m) {
-    const p = { x: at.x, ground: at.ground - m.hop, scale: 64 * (at.zoom ?? 1), face: at.face, rot: at.rot, stretch: m.stretch };
+    const p = { x: at.x, ground: at.ground - m.hop, scale: 64 * (at.zoom ?? 1), face: at.face, rot: at.rot, stretch: m.stretch, hat: at.appearance?.accessories?.hat || at.hat };
     const surge = Math.sin(2 * Math.PI * m.phase);
     if (m.state === 'walk') Object.assign(p, { phase: m.phase, wave: .16, curl: 1 - .12 * surge,
       stretch: 1 + .06 * surge, hop: 3 * Math.max(0, surge), ground: at.ground, mouth: .8 + .2 * surge });

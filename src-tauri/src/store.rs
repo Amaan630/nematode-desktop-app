@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
 pub fn path(app: &AppHandle, name: &str) -> PathBuf {
-    app.path().app_data_dir().unwrap_or_default().join(name)
+    let root = app.path().app_data_dir().unwrap_or_default();
+    (if crate::desktop_dev() { root.join("desktop-dev") } else { root }).join(name)
 }
 
 pub fn read(app: &AppHandle, name: &str) -> Option<String> {

@@ -11,6 +11,7 @@ const CROISSANT_INK = {
 };
 
 function drawCroissant(ctx, p) {
+  const canvasTransform = ctx.getTransform();
   const C = CROISSANT_INK, S = p.scale, f = p.face ?? 1, walk = p.walk ?? 0, ph = p.phase ?? 0, sq = p.squash ?? 0;
   const [jl, jr] = p.jiggle ?? [0, 0], OUT = .024, LEG = .17, wave = Math.sin(2 * Math.PI * ph);
   const lift = [Math.max(0, wave), Math.max(0, -wave)].map(v => .07 * walk * v); // left, right boot
@@ -83,10 +84,16 @@ function drawCroissant(ctx, p) {
   }
   ctx.strokeStyle = C.eye; ctx.lineWidth = .016;
   ctx.beginPath(); ctx.arc(look, fy + .015, .042, .18 * Math.PI, .82 * Math.PI); ctx.stroke();
+  let hat;
+  if (p.hat && typeof drawHat === 'function') {
+    ctx.save(); ctx.translate(0, O[1] - R - .23); ctx.scale(.017, .017);
+    hat = new Path2D(); hat.addPath(drawHat(ctx, p.hat), canvasTransform.inverse().multiply(ctx.getTransform())); ctx.restore();
+  }
   ctx.restore();
 
   const hit = new Path2D(); // roughly his body, in screen space
-  hit.ellipse(p.x, p.ground - .42 * S, .72 * S, .45 * S, 0, 0, 7);
+  hit.ellipse(p.x, p.ground - .42 * S, .72 * S, .45 * S, 0, 0, 7, f < 0);
+  if (hat) hit.addPath(hat);
   return hit;
 }
 
@@ -114,7 +121,7 @@ if (typeof CHARACTERS !== 'undefined') CHARACTERS.croissant = {
   create() { return { ...this, jiggle: new CroissantJiggle() }; }, // each visitor gets its own springs
   draw(ctx, at, m) {
     return drawCroissant(ctx, {
-      x: at.x, ground: at.ground - m.hop, scale: 70 * (at.zoom ?? 1), face: at.face, rot: at.rot,
+      x: at.x, ground: at.ground - m.hop, hat: at.appearance?.accessories?.hat || at.hat, scale: 70 * (at.zoom ?? 1), face: at.face, rot: at.rot,
       walk: m.state === 'walk' ? 1 : 0, phase: m.phase,
       squash: 1 - m.stretch, blink: (at.now / 1000) % 3.7 < .12 ? 1 : 0,
       jiggle: this.jiggle.step(at.dt, at.accel[0] * at.face, at.accel[1], 70),

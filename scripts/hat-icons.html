@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><body>
+<script src="../src/hats.js"></script>
+<script>
+for(const id of Object.keys(HATS).filter(id=>id!=='none')) {
+ const source=document.createElement('canvas'); source.width=source.height=160;
+ const ctx=source.getContext('2d'); ctx.translate(80,100); ctx.scale(2,2); drawHat(ctx,id);
+ const pixels=ctx.getImageData(0,0,160,160).data;
+ let l=160,t=160,r=0,b=0;
+ for(let y=0;y<160;y++)for(let x=0;x<160;x++)if(pixels[(y*160+x)*4+3]){l=Math.min(l,x);t=Math.min(t,y);r=Math.max(r,x);b=Math.max(b,y);}
+ const out=document.createElement('canvas');out.width=out.height=64;
+ const w=r-l+1,h=b-t+1,s=60/Math.max(w,h);
+ out.getContext('2d').drawImage(source,l,t,w,h,(64-w*s)/2,(64-h*s)/2,w*s,h*s);
+ const image=document.createElement('img');image.dataset.hat=id;image.src=out.toDataURL();document.body.append(image);
+}
+</script>

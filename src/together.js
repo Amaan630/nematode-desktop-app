@@ -3,7 +3,12 @@ class Together {
   constructor() { this.active = false; this.guest = null; }
 
   join(character) {
-    if (this.active) return;
+    if (this.active) {
+      const current = this.guest.character;
+      if (current.appearance?.character === character.appearance?.character) current.appearance = character.appearance;
+      else this.guest.character = character.create?.() || character;
+      return;
+    }
     this.active = true;
     this.guest = { character: character.create?.() || character, x: -character.width, y: null, t: 0, phase: 0, waiting: true, leaving: false };
   }

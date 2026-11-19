@@ -112,5 +112,31 @@ const brokenStorage = {getItem: stores[0].getItem, setItem:()=>{throw new Error(
 const broken = new CloudConnection(endpoint,options(brokenStorage,'nematode'));
 const length = broken.state.outbox.length;
 await assert.rejects(broken.send(event(broken,'heart')),/disk full/); assert.equal(broken.state.outbox.length,length);
+// Complete appearances survive queued gestures and profile changes; unknown future fields pass through.
+let outfit={character:'nematode',accessories:{hat:'cap',scarf:'mint'},palette:{accent:'blue'}};
+const dressed = new CloudConnection(endpoint,{...options(stores[0],'nematode'),appearance:()=>outfit});
+await dressed.cycle();
+const gift={...event(dressed,'heart'),payload:{character:outfit.character,appearance:structuredClone(outfit)}};
+await send(dressed,gift);
+outfit={...outfit,accessories:{hat:'sunhat',scarf:'mint'}}; await dressed.cycle();
+response=await request(endpoint+'/sync',{headers:auth(again)});
+const wardrobe=await response.json();
+assert.equal(wardrobe.events.find(e=>e.id===gift.id).payload.appearance.accessories.hat,'cap');
+assert.equal(wardrobe.events.find(e=>e.id===gift.id).payload.appearance.palette.accent,'blue');
+assert.equal(wardrobe.peer.appearance.accessories.hat,'sunhat');
+assert.equal(wardrobe.together.peer.appearance.accessories.scarf,'mint');
+response=await request(endpoint+'/actions',{method:'POST',headers:auth(dressed),body:JSON.stringify({...gift,payload:{character:'nematode',appearance:outfit}})});
+assert.equal(response.status,409,'an action ID cannot change its saved appearance');
+response=await request(endpoint+'/register',{method:'POST',headers:auth(dressed),body:JSON.stringify({appearance:{character:'nematode',accessories:{hat:{bad:true}}}})});
+assert.equal(response.status,400);
+response=await request(endpoint+'/register',{method:'POST',headers:auth(dressed),body:JSON.stringify({appearance:{character:'nematode',future:'x'.repeat(2100)}})});
+assert.equal(response.status,400);
+// The explicit additive migration preserves existing users, pending actions and acknowledgements.
+const legacy=new DatabaseSync(':memory:');
+legacy.exec("CREATE TABLE clients(id TEXT, character TEXT); CREATE TABLE actions(id TEXT,character TEXT,acknowledged INTEGER); INSERT INTO clients VALUES ('alice','nematode'); INSERT INTO actions VALUES ('pending','croissant',0);");
+legacy.exec(readFileSync(new URL('../cloudflare/migrations/0002_appearance.sql',import.meta.url),'utf8'));
+assert.equal(legacy.prepare('SELECT character FROM clients').get().character,'nematode');
+assert.equal(legacy.prepare('SELECT acknowledged FROM actions').get().acknowledged,0);
+assert.equal(legacy.prepare('SELECT appearance FROM actions').get().appearance,null); legacy.close();
 console.log('Passed: auto-registration, first-other routing, inactive/restarted receiver, offline sender, lost-response dedupe, acknowledgements, latest shared state, explicit addressing and auth boundaries.');
 sqlite.close();

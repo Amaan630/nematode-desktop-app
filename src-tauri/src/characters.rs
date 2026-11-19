@@ -48,3 +48,12 @@ pub fn apply(app: &AppHandle, choice: &'static Choice) {
 pub fn get_character() -> String {
     current().id.to_string()
 }
+
+/// The overlay renders the complete appearance, so tray previews follow every accessory automatically.
+#[tauri::command]
+pub fn set_character_preview(app: AppHandle, png: Vec<u8>) -> Result<(), String> {
+    if png.len() > 65536 { return Err("Character preview is too large".into()); }
+    let icon = Image::from_bytes(&png).map_err(|e| e.to_string())?;
+    if let Some(tray) = app.tray_by_id(menu::TRAY) { tray.set_icon(Some(icon)).map_err(|e| e.to_string())?; }
+    Ok(())
+}

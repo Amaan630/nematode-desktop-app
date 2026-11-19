@@ -9,7 +9,7 @@ use tauri::{
 #[cfg(debug_assertions)]
 use tauri::{menu::Submenu, Manager};
 
-use crate::{autostart, characters, icons, presence};
+use crate::{autostart, characters, hats, icons, presence};
 
 pub const TRAY: &str = "tray";
 
@@ -18,12 +18,14 @@ pub fn build(app: &App) -> tauri::Result<()> {
     let summon = MenuItem::with_id(app, "summon", "Summon", true, None::<&str>)?;
     let characters_menu = characters::PICKER.submenu(handle)?;
     let icons_menu = icons::PICKER.submenu(handle)?;
-    let login = CheckMenuItem::with_id(app, "login", "Open at Login", true, autostart::enabled(handle), None::<&str>)?;
+    icons_menu.set_enabled(!crate::desktop_dev())?;
+    let login = CheckMenuItem::with_id(app, "login", "Open at Login", !crate::desktop_dev(), autostart::enabled(handle), None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Nematode", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[
         &summon,
         &PredefinedMenuItem::separator(app)?,
         &characters_menu,
+        &hats::PICKER.submenu(handle)?,
         &icons_menu,
         &login,
         &PredefinedMenuItem::separator(app)?,
@@ -63,6 +65,8 @@ pub fn build(app: &App) -> tauri::Result<()> {
                 _ => {
                     if let Some(c) = characters::PICKER.from_event(id) {
                         characters::apply(app, c);
+                    } else if let Some(c) = hats::PICKER.from_event(id) {
+                        hats::apply(app, c);
                     } else if let Some(c) = icons::PICKER.from_event(id) {
                         icons::apply(app, c);
                     }

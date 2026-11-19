@@ -165,3 +165,10 @@ pub fn refresh_menu() {
 pub fn summon_for_together(app: AppHandle) {
     if is_away() { toggle_summon(&app); }
 }
+
+/// Reloaded UI asks for the native state again; the previous page's sent cache is no longer valid.
+#[tauri::command]
+pub fn overlay_ready(app: AppHandle) {
+    STATE.lock().unwrap().sent.clear();
+    if let Some(win) = app.get_webview_window(OVERLAY) { sync(&win); }
+}

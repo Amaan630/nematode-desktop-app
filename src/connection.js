@@ -1,9 +1,9 @@
 // Durable local queues plus WebSocket wake-ups and HTTP delivery. Registration is automatic; nobody enters a code.
 class CloudConnection {
-  constructor(url, { storage = localStorage, fetch = globalThis.fetch.bind(globalThis), character, isActive, canPlay = () => true, onGesture, onState, WebSocket = globalThis.WebSocket }) {
+  constructor(url, { storage = localStorage, fetch = globalThis.fetch.bind(globalThis), character, appearance = () => ({character:character(), accessories:{}}), isActive, canPlay = () => true, onGesture, onState, WebSocket = globalThis.WebSocket }) {
     this.WebSocket = WebSocket; this.stopped = true; this.needsSync = true; this.retryAt = 0; this.delay = 1000;
     this.url = url.replace(/\/$/, ''); this.storage = storage; this.fetch = fetch;
-    this.character = character; this.isActive = isActive; this.canPlay = canPlay; this.onGesture = onGesture; this.onState = onState;
+    this.character = character; this.appearance = appearance; this.isActive = isActive; this.canPlay = canPlay; this.onGesture = onGesture; this.onState = onState;
     this.key = `nematode-cloud:${this.url}`;
     const saved = storage.getItem(this.key);
     if (saved) {
@@ -68,9 +68,9 @@ class CloudConnection {
       const active = await this.isActive();
       this.applyState(active);
       await this.playNext(); // downloaded gestures also work while the network is down
-      const character = this.character();
-      if (this.profile !== character) {
-        await this.request('/register', { character }); this.profile = character;
+      const appearance = this.appearance(), profile = JSON.stringify(appearance);
+      if (this.profile !== profile) {
+        await this.request('/register', { character: appearance.character, appearance }); this.profile = profile;
       }
       if (!this.stopped && !this.socket) this.connect();
       // Keep action ordering, including Together then Separate; retries use the same event ID.
@@ -136,7 +136,7 @@ class CloudConnection {
     this.applyState(await this.isActive());
     await this.playNext();
     if (!this.running && now >= this.retryAt && (this.needsSync || !this.socket
-        || this.profile !== this.character() || this.state.outbox.length || this.state.receipts.length)) await this.cycle();
+        || this.profile !== JSON.stringify(this.appearance()) || this.state.outbox.length || this.state.receipts.length)) await this.cycle();
   }
 
   start() {

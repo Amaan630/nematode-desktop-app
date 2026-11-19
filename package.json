@@ -1,12 +1,14 @@
 {
   "name": "nematode",
   "productName": "Nematode",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "A little nematode who stomps on your Claude tab.",
   "scripts": {
     "dev": "tauri dev",
+    "desktop-dev": "node scripts/desktop-dev.mjs",
     "build": "tauri build",
     "icons": "./scripts/icons.sh",
+    "icons:hats": "node scripts/hat-icons.mjs",
     "build:mac": "./scripts/build-mac.sh"
   },
   "devDependencies": {

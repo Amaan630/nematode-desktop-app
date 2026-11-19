@@ -53,6 +53,24 @@ try {
     Object.assign(n, {x: 450, y: 550, state: 'idle', t: 0, home: 450, nextWander: 100});
     want.mode = 'free'; want.floor = 550; step(.1);
     window.check = (condition, message) => { if (!condition) throw new Error(message); };
+    for (const character of Object.values(CHARACTERS)) for (const hat of Object.keys(HATS)) {
+      for (const face of [-1,1]) for (const rot of [0,.8]) {
+        const canvas=document.createElement('canvas'); canvas.width=400; canvas.height=400;
+        const paint=canvas.getContext('2d'); paint.scale(2,2);
+        const at={x:100,ground:160,face,rot,accel:[0,0],dt:.016,now:1000,hat};
+        const m={state:'idle',phase:0,t:0,stretch:1,hop:0,crouch:0,impact:0,airborne:false};
+        const shape=character.draw(paint,{...at,hat:'none'},m);
+        const before=paint.getImageData(0,0,400,400).data;
+        paint.clearRect(0,0,200,200); const outline=character.draw(paint,at,m);
+        const after=paint.getImageData(0,0,400,400).data;
+        let extra=0, hittable=0;
+        for(let y=0;y<400;y++) for(let x=0;x<400;x++) {
+          const k=(y*400+x)*4+3;
+          if(before[k]===0 && after[k]>240) {extra++; if(paint.isPointInPath(outline,x+.5,y+.5)) hittable++;}
+        }
+        if(hat!=='none') check(extra>30 && hittable/extra>.65, 'hat remains attached and hittable at Retina scale: '+character.name+'/'+hat+' '+face+' '+rot+' '+extra+' '+hittable);
+      }
+    }
     window.openFan = () => cv.dispatchEvent(new MouseEvent('contextmenu', {clientX: n.x, clientY: n.y - 30, bubbles: true, cancelable: true}));
     window.pick = label => [...fan.element.querySelectorAll('[role=menuitem]')].find(b => b.getAttribute('aria-label') === label).dispatchEvent(new MouseEvent('click', {bubbles:true}));
     openFan(); check(fan.open, 'right-click opens fan');
@@ -117,7 +135,7 @@ try {
     check(!fan.open && !press, 'outside click closes without grabbing');
     setCharacter('croissant'); Object.assign(n, {x:850, y:550, state:'idle'}); step(.02); openFan();
     check(fan.element.getBoundingClientRect().right <= innerWidth, 'right-edge menu stays onscreen');
-    pick('Be together'); step(3); check(together.guest.character === CHARACTERS.nematode, 'other character works');
+    pick('Be together'); step(3); check(together.guest.character.appearance.character === 'nematode', 'other character works');
     openFan(); nema({mode:'away'}); check(!fan.open, 'dismiss closes menu'); step(12); check(n.state === 'gone', 'dismiss still leaves');
     check(Number.isFinite(n.x) && Number.isFinite(n.y), 'finite physics');
   `);
@@ -130,7 +148,7 @@ try {
     check(delivery.active, 'incoming heart queues a visit');
     for (let i = 0; i < 1200 && delivery.guest?.state !== 'give'; i++) step(1/60);
     check(delivery.guest?.state === 'give', 'sender arrives');
-    check(delivery.guest.character === CHARACTERS.nematode && character() === CHARACTERS.croissant, 'sender character is preserved');
+    check(delivery.guest.character.appearance.character === 'nematode' && character().appearance.character === 'croissant', 'sender character is preserved');
     check(hearts.length === 1 && hearts[0].colors === GOLD_HEART_COLORS, 'visitor gives one gold heart');
     step(.45);
   `);
@@ -150,7 +168,7 @@ try {
     buddy.receive({id:'love-preview', from:'alice', to:buddy.id, action:'love', payload:{character:'nematode'}});
     for (let i=0; i<1800 && !words.length; i++) step(1/60);
     check(words.length === 1 && words[0].text === 'I love you', 'received love plays its bubble');
-    check(delivery.guest.character === CHARACTERS.nematode, 'love uses sender character');
+    check(delivery.guest.character.appearance.character === 'nematode', 'love uses sender character');
     step(30); check(!delivery.active && n.state === 'gone', 'love visitor and temporary resident leave');
     nema({mode:'free', floor:550});
     buddy.receive({id:'together-preview', from:'alice', to:buddy.id, action:'together', payload:{character:'croissant'}});
@@ -162,10 +180,10 @@ try {
   `);
   await run(`
     setCharacter('nematode'); previewReceive('heart');
-    check(delivery.queue[0].character === CHARACTERS.croissant, 'debug uses Croissant for Nematode');
+    check(delivery.queue[0].character.appearance.character === 'croissant', 'debug uses Croissant for Nematode');
     delivery.queue.length = 0;
     setCharacter('croissant'); previewReceive('love');
-    check(delivery.queue[0].character === CHARACTERS.nematode, 'debug uses Nematode for Croissant');
+    check(delivery.queue[0].character.appearance.character === 'nematode', 'debug uses Nematode for Croissant');
     delivery.queue.length = 0;
     Object.assign(n, {x:450, y:550, state:'idle', t:0, home:450, nextWander:100, cursor:null});
     previewReceive('together'); step(3);
@@ -192,6 +210,24 @@ try {
   await run(`
     Object.assign(n, {x:450, y:550, state:'idle'}); want.mode='free'; step(.02); openFan();
     check(fan.element.querySelectorAll('animateTransform').length === 0, 'reduced motion skips spring'); fan.hide();
+  `);
+  await run(`
+    delivery.guest=null; delivery.queue.length=0; together.guest=null; together.active=false;
+    const look={character:'croissant',accessories:{hat:'cap'},future:{color:'blue'}};
+    for(const action of ['heart','love']) {
+      check(receiveGesture({action,payload:{character:look.character,appearance:look}}), 'dressed visitor accepted');
+      step(.02); check(delivery.guest.character.appearance.accessories.hat==='cap', 'gesture carries the hat');
+      delivery.guest=null; delivery.queue.length=0;
+    }
+    together.join(createCharacter(look)); together.guest.x=321; together.guest.t=8;
+    together.join(createCharacter({...look,accessories:{hat:'sunhat'}}));
+    check(together.guest.character.appearance.accessories.hat==='sunhat' && together.guest.x===321 && together.guest.t===8,
+      'together appearance updates without restarting arrival');
+    const captured=[], dressed=new BuddyClient('me',{send:e=>captured.push(e)},()=>look);
+    dressed.send('you','future-gesture'); look.accessories.hat='beret';
+    check(captured[0].payload.appearance.accessories.hat==='cap' && captured[0].payload.appearance.future.color==='blue',
+      'every action automatically captures the complete appearance');
+    together.guest=null; together.active=false;
   `);
   assert.equal(await run(`(async () => {
     const sent = [], client = new BuddyClient('alice', {send: async e => sent.push(e)});

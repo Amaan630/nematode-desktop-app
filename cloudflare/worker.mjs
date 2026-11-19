@@ -32,17 +32,18 @@ async function notify(env, ids = null) {
 
 // The first other installation is the recipient. Keep this policy in one place.
 export async function resolveRecipient(db, sender, requested = null) {
-  return requested
-    ? db.prepare('SELECT id, character FROM clients WHERE id = ? AND id != ?').bind(requested, sender).first()
-    : db.prepare('SELECT id, character FROM clients WHERE id != ? ORDER BY sequence LIMIT 1').bind(sender).first();
+  const peer = requested
+    ? await db.prepare('SELECT id, character, appearance FROM clients WHERE id = ? AND id != ?').bind(requested, sender).first()
+    : await db.prepare('SELECT id, character, appearance FROM clients WHERE id != ? ORDER BY sequence LIMIT 1').bind(sender).first();
+  return peer && { ...peer, appearance: savedAppearance(peer) };
 }
 
 const schema = [
   `CREATE TABLE IF NOT EXISTS clients (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL,
-    secret_hash TEXT NOT NULL, character TEXT NOT NULL)`,
+    secret_hash TEXT NOT NULL, character TEXT NOT NULL, appearance TEXT)`,
   `CREATE TABLE IF NOT EXISTS actions (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL,
     sender TEXT NOT NULL REFERENCES clients(id), recipient TEXT NOT NULL REFERENCES clients(id),
-    pair TEXT NOT NULL, action TEXT NOT NULL, character TEXT NOT NULL, acknowledged INTEGER NOT NULL DEFAULT 0)`,
+    pair TEXT NOT NULL, action TEXT NOT NULL, character TEXT NOT NULL, appearance TEXT, acknowledged INTEGER NOT NULL DEFAULT 0)`,
   'CREATE INDEX IF NOT EXISTS inbox ON actions(recipient, acknowledged, sequence)',
   "CREATE INDEX IF NOT EXISTS relationship ON actions(pair, sequence DESC) WHERE action IN ('together','separate')",
 ];
@@ -54,6 +55,28 @@ const supported = new Set(['heart', 'love', 'together', 'separate']);
 const headers = { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' };
 const json = (body, status = 200) => Response.json(body, { status, headers });
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
+// Transport the whole appearance. The server validates data, not the catalog of wearable items.
+function canonical(value, depth = 0) {
+  if (depth > 4) fail(400, 'Appearance too deeply nested');
+  if (Array.isArray(value)) return value.map(v => canonical(v, depth + 1));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k], depth + 1)]));
+  return value;
+}
+function appearance(data) {
+  const value = data?.appearance ?? { character: data?.character, accessories: {} };
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !character(value.character)
+      || (data.character != null && data.character !== value.character)) fail(400, 'Invalid appearance');
+  const accessories = value.accessories ?? {};
+  if (typeof accessories !== 'object' || Array.isArray(accessories)
+      || Object.entries(accessories).some(([slot, item]) => !character(slot) || !character(item))) fail(400, 'Invalid accessories');
+  const encoded = JSON.stringify(canonical({ ...value, accessories }));
+  if (encoded.length > 2048) fail(400, 'Appearance too large');
+  return encoded;
+}
+function savedAppearance(row) {
+  return row.appearance ? JSON.parse(row.appearance) : { character: row.character, accessories: {} };
+}
+function sameAppearance(row, encoded) { return JSON.stringify(canonical(savedAppearance(row))) === encoded; }
 async function body(request) {
   const reader = request.body?.getReader(), chunks = [];
   let size = 0;
@@ -94,13 +117,13 @@ export default {
       await initialized.get(db);
       if (request.method === 'POST' && url.pathname === '/register') {
         const data = await body(request);
-        if (!character(data.character)) fail(400, 'Invalid character');
+        const look = appearance(data), characterId = JSON.parse(look).character;
         // Idempotent registration survives a lost response without creating a second user.
-        await db.prepare('INSERT INTO clients(id, secret_hash, character) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING')
-          .bind(id, secretHash, data.character).run();
+        await db.prepare('INSERT INTO clients(id, secret_hash, character, appearance) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO NOTHING')
+          .bind(id, secretHash, characterId, look).run();
         const owner = await db.prepare('SELECT secret_hash, character FROM clients WHERE id = ?').bind(id).first();
         if (owner.secret_hash !== secretHash) fail(401, 'Invalid device credential');
-        await db.prepare('UPDATE clients SET character = ? WHERE id = ? AND character != ?').bind(data.character, id, data.character).run();
+        await db.prepare('UPDATE clients SET character = ?, appearance = ? WHERE id = ? AND (character != ? OR appearance IS NULL OR appearance != ?)').bind(characterId, look, id, characterId, look).run();
         await notify(env); // registration also wakes senders waiting for their first recipient
         return json({ id });
       }
@@ -109,32 +132,33 @@ export default {
       if (live) return hub(env).fetch(new Request('https://live/connect', { headers: { Upgrade: 'websocket', 'X-Client-ID': id } }));
       if (request.method === 'POST' && url.pathname === '/actions') {
         const data = await body(request);
-        if (!uuid(data.id) || !supported.has(data.action) || !character(data.payload?.character)
+        const look = appearance(data.payload), characterId = JSON.parse(look).character;
+        if (!uuid(data.id) || !supported.has(data.action)
             || (data.to != null && !uuid(data.to))) fail(400, 'Invalid action');
         const existing = await db.prepare('SELECT * FROM actions WHERE id = ?').bind(data.id).first();
         if (existing) {
-          if (existing.sender !== id || existing.action !== data.action || existing.character !== data.payload.character
+          if (existing.sender !== id || existing.action !== data.action || !sameAppearance(existing, look)
               || (data.to != null && existing.recipient !== data.to)) fail(409, 'Action ID already used');
           await notify(env, [id, existing.recipient]);
           return json({ id: data.id, to: existing.recipient });
         }
         const peer = await resolveRecipient(db, id, data.to);
         if (!peer) fail(409, 'No recipient yet');
-        await db.prepare('INSERT INTO actions(id, sender, recipient, pair, action, character) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING')
-          .bind(data.id, id, peer.id, pairKey(id, peer.id), data.action, data.payload.character).run();
-        const stored = await db.prepare('SELECT sender, recipient, action, character FROM actions WHERE id = ?').bind(data.id).first();
-        if (stored.sender !== id || stored.action !== data.action || stored.character !== data.payload.character
+        await db.prepare('INSERT INTO actions(id, sender, recipient, pair, action, character, appearance) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING')
+          .bind(data.id, id, peer.id, pairKey(id, peer.id), data.action, characterId, look).run();
+        const stored = await db.prepare('SELECT sender, recipient, action, character, appearance FROM actions WHERE id = ?').bind(data.id).first();
+        if (stored.sender !== id || stored.action !== data.action || !sameAppearance(stored, look)
             || stored.recipient !== peer.id) fail(409, 'Action ID already used');
         await notify(env, [id, peer.id]);
         return json({ id: data.id, to: peer.id });
       }
       if (request.method === 'GET' && url.pathname === '/sync') {
         const peer = await resolveRecipient(db, id);
-        const events = await db.prepare("SELECT id, sender AS 'from', recipient AS 'to', action, character FROM actions WHERE recipient = ? AND acknowledged = 0 AND action IN ('heart','love') ORDER BY sequence LIMIT 50")
+        const events = await db.prepare("SELECT id, sender AS 'from', recipient AS 'to', action, character, appearance FROM actions WHERE recipient = ? AND acknowledged = 0 AND action IN ('heart','love') ORDER BY sequence LIMIT 50")
           .bind(id).all();
         const state = peer && await db.prepare("SELECT sequence, action FROM actions WHERE pair = ? AND action IN ('together','separate') ORDER BY sequence DESC LIMIT 1")
           .bind(pairKey(id, peer.id)).first();
-        return json({ peer, events: events.results.map(({ character, ...event }) => ({ ...event, payload: { character } })),
+        return json({ peer, events: events.results.map(({ character, appearance, ...event }) => ({ ...event, payload: { character, appearance: savedAppearance({ character, appearance }) } })),
           together: { version: state?.sequence || 0, active: state?.action === 'together', peer } });
       }
       if (request.method === 'POST' && url.pathname === '/ack') {

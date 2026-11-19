@@ -13,10 +13,12 @@ Deployed on 2026-11-19 at https://nematode-buddies.amaansyedali.workers.dev; thi
 
 ```sh
 terraform -chdir=cloudflare init
-terraform -chdir=cloudflare plan -out=deploy.tfplan
+terraform -chdir=cloudflare plan -var=initialize_live_hub=true -out=deploy.tfplan
 terraform -chdir=cloudflare apply deploy.tfplan
 node scripts/configure-backend.mjs "$(terraform -chdir=cloudflare output -raw backend_url)"
 ```
+
+Use `initialize_live_hub=true` only for the first deployment to a new account. Omit it for all subsequent plans; the existing namespace and its sockets remain in place.
 
 4. Build the Mac and Windows apps normally. Both contain the same public URL in `src/backend.js`.
    She only installs/opens the app. Registration and recipient discovery happen automatically.
@@ -24,7 +26,7 @@ node scripts/configure-backend.mjs "$(terraform -chdir=cloudflare output -raw ba
 Keep Terraform state and its backups private and backed up. They are ignored by Git. D1 has `prevent_destroy`
 to prevent accidental replacement/deletion during normal Terraform changes. Provider versions are locked.
 The Worker creates its initial tables and indexes idempotently on first use; this is additive bootstrap, not
-a general migration framework. Future schema changes need an explicit migration. Wrangler does not deploy
+a general migration framework. Existing databases require `migrations/0002_appearance.sql` before deploying the appearance-aware Worker; production applied it on 2026-11-19. It only adds nullable JSON text columns and preserves all rows. Future schema changes need an explicit migration. Wrangler does not deploy
 production; its configuration here is only for local runtime testing.
 
 ## How delivery works
@@ -94,3 +96,13 @@ lock/unlock behavior on both machines, and delivery between the two real machine
 Sources: [D1 transactions](https://developers.cloudflare.com/d1/worker-api/d1-database/),
 [Worker Terraform resource](https://registry.terraform.io/providers/cloudflare/cloudflare/5.20.0/docs/resources/workers_script),
 [D1 Terraform resource](https://registry.terraform.io/providers/cloudflare/cloudflare/5.20.0/docs/resources/d1_database).
+
+
+## Shared appearance
+
+Profiles and actions carry a complete `appearance` JSON object, currently `{character, accessories:{hat}}`.
+The Worker validates its character/slot IDs, size and depth, then preserves unknown future fields. Queued
+actions save an immutable snapshot; live Together state returns the peer's current profile. Legacy clients
+still send/receive the top-level `character` field and simply omit accessories. Renderer changes belong in
+the app, not the server or gesture handlers. Tests cover snapshot preservation, live outfit changes,
+unknown future fields, appearance validation, action-ID conflicts, and the additive database migration.

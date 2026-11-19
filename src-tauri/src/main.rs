@@ -6,6 +6,7 @@ mod activity;  // unlocked / recently active, for received gestures
 mod autostart;  // Open at Login
 mod characters; // Character menu: who's on screen
 mod grab;       // taking the mouse while you hold him, handing focus back after
+mod hats;       // a remembered hat for either character
 mod icons;      // App Icon menu: Finder/Dock on macOS, tray/shortcuts on Windows
 mod locate;     // finding the active claude.ai tab
 mod menu;       // the menu-bar / tray menu
@@ -20,6 +21,8 @@ mod mac;
 #[cfg(windows)]
 mod win;
 
+pub fn desktop_dev() -> bool { cfg!(all(debug_assertions, feature = "desktop-dev")) }
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
@@ -27,10 +30,13 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             activity::user_active,
             presence::summon_for_together,
+            presence::overlay_ready,
             grab::cursor,
             grab::set_grabbable,
             grab::release,
             characters::get_character,
+            characters::set_character_preview,
+            hats::get_hat,
             setup::status,
             setup::request_accessibility,
             setup::close_setup,
@@ -39,13 +45,15 @@ fn main() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory); // menu bar only, no Dock icon
             let overlay = presence::init(app)?;
-            autostart::default_on(app.handle());
+            if !desktop_dev() { autostart::default_on(app.handle()); }
             menu::build(app)?;
             // Re-apply saved choices (updates replace the app, and its icon, with the defaults).
             characters::apply(app.handle(), characters::PICKER.saved(app.handle()));
-            icons::apply(app.handle(), icons::PICKER.saved(app.handle()));
+            hats::apply(app.handle(), hats::PICKER.saved(app.handle()));
+            if !desktop_dev() { icons::apply(app.handle(), icons::PICKER.saved(app.handle())); }
             setup::show_if_needed(app.handle());
-            update::spawn(app.handle().clone());
+            if desktop_dev() { presence::toggle_summon(app.handle()); }
+            else { update::spawn(app.handle().clone()); }
             presence::spawn(overlay);
             Ok(())
         })

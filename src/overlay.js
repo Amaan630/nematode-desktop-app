@@ -34,8 +34,21 @@ fit(); addEventListener('resize', fit);
 // --- Who's out ---------------------------------------------------------------------------------
 // Set by the app (menu bar > Character) or ?char= in the browser preview.
 let characterId = new URLSearchParams(location.search).get('char');
-const character = () => CHARACTERS[characterId] || CHARACTERS.nematode;
-function setCharacter(id) { fan.hide(); characterId = id; }
+if (!Object.hasOwn(CHARACTERS, characterId)) characterId = 'nematode';
+let resident;
+const appearance = () => ({ character: characterId || 'nematode', accessories: { hat: hatId } });
+const character = () => resident ||= createCharacter(appearance());
+let hatId = localStorage.getItem('hat') || 'none';
+function refreshAppearance() {
+  resident = null;
+  if (tauri) {
+    const png = renderCharacterPreview(appearance()).toDataURL('image/png').split(',')[1];
+    tauri.invoke('set_character_preview', { png: Array.from(atob(png), c => c.charCodeAt(0)) }).catch(console.error);
+  }
+}
+function setHat(id) { if (Object.hasOwn(HATS, id)) { hatId = id; refreshAppearance(); localStorage.setItem('hat', id); start(); } }
+tauri?.invoke('get_hat').then(setHat).catch(console.error);
+function setCharacter(id) { if (!Object.hasOwn(CHARACTERS, id)) return; fan.hide(); characterId = id; refreshAppearance(); }
 tauri?.invoke('get_character').then(setCharacter).catch(() => {});
 const OFF = () => -character().width; // just past the left edge
 
@@ -306,7 +319,7 @@ cv.addEventListener('pointerup', e => {
 });
 
 // --- Shared gestures -----------------------------------------------------------------------------
-const buddy = new BuddyClient('local-preview');
+const buddy = new BuddyClient('local-preview', null, appearance);
 let connection = null;
 const together = new Together();
 const delivery = new Delivery((action, from) => actions[action].play(from));
@@ -322,7 +335,7 @@ const actions = {
   together: { receive: guest => together.join(guest), visible: () => !together.active, label: 'Be together', lines: ['Be', 'together'], icon: '<path stroke="#c53651" stroke-width="2.8" d="M0 16Q8 20 12 10C-1-6-1 25 12 10C24-6 28 23 12 10Q17 21 25 16M12 11 7 22m6-11 6 11"/>',
     play: () => {
       // Until paired, preview another registered character; no character names are baked into the scene.
-      const guest = CHARACTERS[connection?.peer?.character] || Object.values(CHARACTERS).find(c => c !== character()) || character();
+      const guest = createCharacter(connection?.peer) || createCharacter({ ...appearance(), character: Object.keys(CHARACTERS).find(id => id !== appearance().character) || appearance().character });
       together.join(guest);
     } },
   separate: { visible: () => together.active, label: 'Separate', icon: '<path stroke="#c53651" stroke-width="2.8" d="M1 15Q5 18 8 13C-2 1 0 24 8 13m8 0c10-12 9 10 0 0q4 5 8 2M8 13l-3 9m11-9 4 9"/>',
@@ -333,7 +346,7 @@ const fan = new ActionFan(
     .map(([id, action]) => ({ id, ...action })),
   async id => {
     actions[id].play(); start();
-    try { await buddy.send(connection ? null : 'partner-preview', id, { character: characterId || 'nematode' }); }
+    try { await buddy.send(connection ? null : 'partner-preview', id); }
     catch (e) { console.error(e); say('Couldn’t send'); }
   },
   () => { setHover(false); tauri?.invoke('release'); },
@@ -342,7 +355,7 @@ const fan = new ActionFan(
 // The same presentation path serves real incoming gestures and Debug previews.
 function receiveGesture(event, complete = () => {}) {
   if (!Object.hasOwn(actions, event.action) || !Object.hasOwn(CHARACTERS, event.payload.character)) return false;
-  const action = actions[event.action], sender = CHARACTERS[event.payload.character];
+  const action = actions[event.action], sender = createCharacter(event.payload);
   if (action.receive) action.receive(sender);
   else if (action.visit) delivery.enqueue(sender, event.action, complete);
   else return false;
@@ -354,16 +367,15 @@ buddy.addEventListener('action', ({ detail }) => receiveGesture(detail));
 if (BACKEND_URL && !new URLSearchParams(location.search).has('demo')) {
   try {
     connection = new CloudConnection(BACKEND_URL, {
-      character: () => characterId || 'nematode',
+      appearance,
       isActive: async () => tauri ? await tauri.invoke('user_active') : true,
       canPlay: () => !drag && !press && !fan.open && !['held', 'fly', 'leap'].includes(n.state),
       onGesture: receiveGesture,
       onState: state => {
         if (state.active) {
-          const guest = CHARACTERS[state.peer?.character];
+          const guest = createCharacter(state.peer);
           if (!guest) return false;
           together.join(guest);
-          if (together.guest.character.name !== guest.name) together.guest.character = guest.create?.() || guest;
           if (want.mode === 'away') {
             if (tauri) tauri.invoke('summon_for_together').catch(console.error);
             else nema({mode:'free', floor:want.floor});
@@ -375,8 +387,9 @@ if (BACKEND_URL && !new URLSearchParams(location.search).has('demo')) {
     buddy.id = connection.state.id;
     buddy.transport = connection;
     // Fetch the saved character before registering this installation's profile.
-    Promise.resolve(tauri?.invoke('get_character')).then(id => {
+    Promise.all([tauri?.invoke('get_character'), tauri?.invoke('get_hat')]).then(([id, hat]) => {
       if (id) setCharacter(id);
+      if (hat) setHat(hat);
       connection.start();
     }).catch(console.error);
   } catch (e) {
@@ -411,9 +424,9 @@ cv.addEventListener('pointercancel', () => {
 });
 
 // Shared by the debug menu and browser previews; choose a distinct sender from the registry.
-function previewReceive(action, sender = Object.keys(CHARACTERS).find(id => CHARACTERS[id] !== character())) {
+function previewReceive(action, sender = Object.keys(CHARACTERS).find(id => id !== appearance().character)) {
   return buddy.receive({ id: crypto.randomUUID(), from: 'preview-sender', to: buddy.id,
-    action, payload: { character: sender } });
+    action, payload: { character: sender, appearance: { ...appearance(), character: sender } } });
 }
 
 // Browser preview: index.html?demo (add &char=croissant for another character)
@@ -423,3 +436,6 @@ if (new URLSearchParams(location.search).has('demo')) {
   const preview = new URLSearchParams(location.search);
   if (preview.has('receive')) previewReceive(preview.get('receive'), preview.get('sender') || undefined);
 }
+
+// A page reload must recover the native summon/tab state.
+tauri?.invoke("overlay_ready").catch(console.error);
