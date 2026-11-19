@@ -6,3 +6,9 @@ build/.venv/
 build/dmg-background*.png
 build/char-*.png
 build/og.png
+cloudflare/.terraform/
+cloudflare/*.tfstate*
+cloudflare/*.tfplan
+cloudflare/*.tfvars
+cloudflare/.wrangler/
+cloudflare/.env

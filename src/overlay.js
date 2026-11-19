@@ -35,7 +35,7 @@ fit(); addEventListener('resize', fit);
 // Set by the app (menu bar > Character) or ?char= in the browser preview.
 let characterId = new URLSearchParams(location.search).get('char');
 const character = () => CHARACTERS[characterId] || CHARACTERS.nematode;
-function setCharacter(id) { characterId = id; }
+function setCharacter(id) { fan.hide(); characterId = id; }
 tauri?.invoke('get_character').then(setCharacter).catch(() => {});
 const OFF = () => -character().width; // just past the left edge
 
@@ -50,13 +50,14 @@ let prevPos = null, prevVel = [0, 0];
 
 // Called by the app: { mode: 'away' | 'tab' | 'free', x, y, floor, reset }.
 function nema(m) {
+  if (m.reset || m.mode === 'away') fan.hide();
   if (m.reset) Object.assign(n, { x: OFF(), state: 'gone' });
   if (m.floor) want.floor = m.floor;
   if (m.mode === 'tab') Object.assign(want, { x: m.x, y: m.y });
   if (m.mode === 'free' && want.mode !== 'free') n.home = null; // pick a fresh spot
   want.mode = m.mode;
   if (n.state === 'gone') {
-    if (want.mode === 'away') return;
+    if (want.mode === 'away' && !delivery.active) return;
     Object.assign(n, { x: OFF(), y: want.mode === 'tab' ? want.y : want.floor });
   }
   if (['gone', 'walk', 'stomp', 'idle'].includes(n.state)) go(); // held/fly/leap check `want` when they finish
@@ -67,6 +68,7 @@ function start() { if (!running) { running = true; last = performance.now(); req
 // --- Deciding where to go ------------------------------------------------------------------------
 const clampX = x => Math.max(character().width, Math.min(innerWidth - character().width, x));
 function goal() {
+  if (delivery.active && want.mode === 'away') return { x: innerWidth * .6, y: want.floor, then: 'idle' };
   if (want.mode === 'tab') return { x: want.x, y: want.y, then: 'stomp' };
   if (want.mode === 'free') {
     n.home ??= clampX(innerWidth * (.25 + Math.random() * .5));
@@ -92,6 +94,7 @@ function leap(g) {
 
 // Summoned and idle: now and then he wanders off, and sometimes he bolts when your cursor gets close.
 function idle() {
+  if (delivery.active) return;
   const c = n.cursor, near = c && Math.hypot(c[0] - n.x, c[1] - (n.y - character().height / 2)) < 140;
   if (!near) { n.wasNear = false; n.flees = 0; }
   else if (!n.wasNear) {
@@ -180,8 +183,10 @@ function drawDust(dt) {
 
 // --- Hearts --------------------------------------------------------------------------------------
 // Click him and a heart pops out above his head, then floats up, swaying, and fades away.
-function heart() {
-  hearts.push({ x: n.x, y: n.y - character().height * 1.05, t: 0, sway: Math.random() * 6, dir: Math.random() < .5 ? -1 : 1 });
+function heart(colors = HEART_COLORS, from) {
+  const y = from?.y ?? n.y - character().height * 1.05;
+  hearts.push({ x: from?.x ?? n.x, y: colors === GOLD_HEART_COLORS ? Math.max(80, y) : y,
+    toX: from ? n.x : null, colors, t: 0, sway: Math.random() * 6, dir: Math.random() < .5 ? -1 : 1 });
   start();
 }
 function drawHearts(dt) {
@@ -190,8 +195,9 @@ function drawHearts(dt) {
     const pop = h.t < .25 ? 1 + .25 * Math.sin(Math.PI * h.t / .25) : 1; // overshoots, then settles
     const grow = Math.min(1, h.t / .12), rise = 70 * h.t + 25 * h.t * h.t;
     ctx.globalAlpha = Math.min(1, (1.8 - h.t) / .5);
-    drawHeart(ctx, h.x + h.dir * 12 * Math.sin(2.6 * h.t + h.sway) - h.dir * 12 * Math.sin(h.sway), h.y - rise,
-              26 * grow * pop, .18 * Math.sin(2.6 * h.t + h.sway + 1));
+    const x = h.toX === null ? h.x : h.x + (h.toX - h.x) * ease(Math.min(1, h.t / .8));
+    drawHeart(ctx, x + h.dir * 12 * Math.sin(2.6 * h.t + h.sway) - h.dir * 12 * Math.sin(h.sway), h.y - rise,
+              26 * grow * pop, .18 * Math.sin(2.6 * h.t + h.sway + 1), h.colors);
   }
   ctx.globalAlpha = 1;
 }
@@ -199,13 +205,14 @@ function drawHearts(dt) {
 // --- Frame ---------------------------------------------------------------------------------------
 function frame(now) {
   try { tick(now); } catch (e) { console.error(e); } // one bad frame must never freeze him
-  if (n.state !== 'gone' || dust.length || hearts.length) requestAnimationFrame(frame);
+  if (n.state !== 'gone' || dust.length || hearts.length || words.length) requestAnimationFrame(frame);
   else { running = false; setHover(false); }
 }
 
 function tick(now) {
   const dt = Math.max(.001, Math.min(.05, (now - last) / 1000)); last = now; // never 0: speeds divide by it
-  if (n.state === 'walk') walk(dt);
+  if (fan.open || together.arriving) { /* keep him still while choosing or pulling the rope */ }
+  else if (n.state === 'walk') walk(dt);
   else if (n.state === 'leap') {
     const u = Math.min(1, (n.t += dt) / n.dur);
     n.x = n.from[0] + (n.to[0] - n.from[0]) * u;
@@ -218,7 +225,8 @@ function tick(now) {
 
   // The moment, described for whichever character is out.
   const motion = { state: n.state, phase: n.phase, t: n.t, stretch: 1, hop: 0, crouch: 0, impact: 0, airborne: false };
-  if (n.state === 'stomp') Object.assign(motion, stomp(n.t));
+  if (fan.open || together.arriving) motion.state = 'idle';
+  else if (n.state === 'stomp') Object.assign(motion, stomp(n.t));
   else if (n.state === 'leap') Object.assign(motion, { stretch: 1.12 - .2 * n.t / n.dur, airborne: true });
   else if (n.state === 'fly') Object.assign(motion, { stretch: 1 - n.squash, impact: n.squash, airborne: true });
 
@@ -228,10 +236,15 @@ function tick(now) {
   prevPos = n.state === 'gone' ? null : [n.x, n.y]; prevVel = v;
 
   ctx.clearRect(0, 0, innerWidth, innerHeight);
+  const delivering = delivery.active;
+  delivery.draw(ctx, { x: n.x, ground: n.y, dt, now }, character());
+  if (delivering && !delivery.active && ['idle', 'stomp', 'walk'].includes(n.state)) go();
+  together.draw(ctx, { x: n.x, ground: n.y, dt, now, settled: ['idle', 'stomp'].includes(n.state) }, character(), n.state !== 'gone');
   hit = n.state === 'gone' ? null
     : character().draw(ctx, { x: n.x, ground: n.y, face: n.face, rot: n.rot, accel, dt, now }, motion);
   drawDust(dt);
   drawHearts(dt);
+  drawWords(dt);
   pollCursor();
 }
 
@@ -244,6 +257,7 @@ function isOver(x, y) {
   return ctx.isPointInPath(hit, x * dpr, y * dpr) || ctx.isPointInStroke(hit, x * dpr, y * dpr);
 }
 function setHover(h) {
+  h = fan.open || h;
   if (h === hover) return;
   hover = h;
   cv.style.cursor = h ? 'grab' : '';
@@ -256,6 +270,7 @@ function pollCursor() {
 }
 
 function grab() {
+  clearTimeout(press.timer);
   cv.style.cursor = 'grabbing';
   drag = press; press = null;
   Object.assign(n, { state: 'held', vx: 0, vy: 0 });
@@ -271,12 +286,14 @@ cv.addEventListener('pointermove', e => {
   n.rot += (Math.max(-.6, Math.min(.6, (e.clientX - drag.hist[0][1]) * .01)) - n.rot) * .3; // swing with the drag
 });
 cv.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.ctrlKey || fan.open || together.arriving) return;
   if (!isOver(e.clientX, e.clientY)) return;
   cv.setPointerCapture(e.pointerId);
   press = { x: e.clientX, y: e.clientY, at: e.timeStamp, hist: [[e.timeStamp, e.clientX, e.clientY]] };
   press.timer = setTimeout(() => press && grab(), CLICK_S * 1000); // held still: still a grab
 });
 cv.addEventListener('pointerup', e => {
+  if (e.button !== 0) return;
   if (press) { clearTimeout(press.timer); press = null; heart(); tauri?.invoke('release'); return; }
   if (!drag) return;
   const [t0, x0, y0] = drag.hist[0], dt = Math.max(.016, (e.timeStamp - t0) / 1000);
@@ -288,8 +305,121 @@ cv.addEventListener('pointerup', e => {
   tauri?.invoke('release'); // hand focus back to Chrome
 });
 
+// --- Shared gestures -----------------------------------------------------------------------------
+const buddy = new BuddyClient('local-preview');
+let connection = null;
+const together = new Together();
+const delivery = new Delivery((action, from) => actions[action].play(from));
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let words = [];
+const actions = {
+  heart: { visit: true, label: 'Send a heart', lines: ['Send a', 'heart'],
+    icon: '<path fill="#ffcf50" stroke="#96601f" d="M12 22 2 12Q-2 2 6 2Q10 2 12 6Q16-1 22 3Q28 8 22 14Z"/><path stroke="#fff3be" d="m5 8 2-2"/>',
+    play: from => heart(GOLD_HEART_COLORS, from) },
+  love: { visit: true, label: 'Send I love you', lines: ['Send', 'I love you'],
+    icon: '<path fill="#ffc9d9" d="M1 3Q11 0 23 3L24 18 15 19 9 25 8 19 1 18Z"/><path fill="#c84c70" stroke="none" d="m12 15-5-5q-2-5 3-4l2 2 2-2q5-1 3 4Z"/>',
+    play: from => say('I love you', from) },
+  together: { receive: guest => together.join(guest), visible: () => !together.active, label: 'Be together', lines: ['Be', 'together'], icon: '<path stroke="#c53651" stroke-width="2.8" d="M0 16Q8 20 12 10C-1-6-1 25 12 10C24-6 28 23 12 10Q17 21 25 16M12 11 7 22m6-11 6 11"/>',
+    play: () => {
+      // Until paired, preview another registered character; no character names are baked into the scene.
+      const guest = CHARACTERS[connection?.peer?.character] || Object.values(CHARACTERS).find(c => c !== character()) || character();
+      together.join(guest);
+    } },
+  separate: { visible: () => together.active, label: 'Separate', icon: '<path stroke="#c53651" stroke-width="2.8" d="M1 15Q5 18 8 13C-2 1 0 24 8 13m8 0c10-12 9 10 0 0q4 5 8 2M8 13l-3 9m11-9 4 9"/>',
+    play: () => { together.separate(); go(); } },
+};
+const fan = new ActionFan(
+  () => Object.entries(actions).filter(([, action]) => !action.visible || action.visible())
+    .map(([id, action]) => ({ id, ...action })),
+  async id => {
+    actions[id].play(); start();
+    try { await buddy.send(connection ? null : 'partner-preview', id, { character: characterId || 'nematode' }); }
+    catch (e) { console.error(e); say('Couldn’t send'); }
+  },
+  () => { setHover(false); tauri?.invoke('release'); },
+);
+
+// The same presentation path serves real incoming gestures and Debug previews.
+function receiveGesture(event, complete = () => {}) {
+  if (!Object.hasOwn(actions, event.action) || !Object.hasOwn(CHARACTERS, event.payload.character)) return false;
+  const action = actions[event.action], sender = CHARACTERS[event.payload.character];
+  if (action.receive) action.receive(sender);
+  else if (action.visit) delivery.enqueue(sender, event.action, complete);
+  else return false;
+  nema({ ...want });
+  return true;
+}
+buddy.addEventListener('action', ({ detail }) => receiveGesture(detail));
+
+if (BACKEND_URL && !new URLSearchParams(location.search).has('demo')) {
+  try {
+    connection = new CloudConnection(BACKEND_URL, {
+      character: () => characterId || 'nematode',
+      isActive: async () => tauri ? await tauri.invoke('user_active') : true,
+      canPlay: () => !drag && !press && !fan.open && !['held', 'fly', 'leap'].includes(n.state),
+      onGesture: receiveGesture,
+      onState: state => {
+        if (state.active) {
+          const guest = CHARACTERS[state.peer?.character];
+          if (!guest) return false;
+          together.join(guest);
+          if (together.guest.character.name !== guest.name) together.guest.character = guest.create?.() || guest;
+          if (want.mode === 'away') {
+            if (tauri) tauri.invoke('summon_for_together').catch(console.error);
+            else nema({mode:'free', floor:want.floor});
+          }
+        } else { together.separate(); go(); }
+        start();
+      },
+    });
+    buddy.id = connection.state.id;
+    buddy.transport = connection;
+    // Fetch the saved character before registering this installation's profile.
+    Promise.resolve(tauri?.invoke('get_character')).then(id => {
+      if (id) setCharacter(id);
+      connection.start();
+    }).catch(console.error);
+  } catch (e) {
+    buddy.transport = { send: async () => { throw e; } };
+    console.error(e); say('Couldn’t connect');
+  }
+}
+
+function say(text, from) {
+  words.push({ text, x: from?.x ?? n.x, y: from ? from.y - 36 : n.y - character().height - 44, t: 0 });
+  start();
+}
+function drawWords(dt) {
+  words = words.filter(w => (w.t += dt) < 3.6);
+  for (const w of words) drawSpeech(ctx, w.text, w.x, w.y, w.t, reducedMotion.matches);
+}
+cv.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (drag || press || n.state === 'gone' || !isOver(e.clientX, e.clientY)) return;
+  if (fan.open) fan.hide();
+  else { fan.show(n.x, n.y - character().height, n.y); setHover(true); }
+});
+document.addEventListener('pointerdown', e => {
+  if (fan.open && !fan.element.contains(e.target)) { e.stopPropagation(); fan.hide(); }
+}, true);
+addEventListener('resize', () => fan.hide());
+addEventListener('blur', () => fan.hide());
+cv.addEventListener('pointercancel', () => {
+  if (press) { clearTimeout(press.timer); press = null; }
+  if (drag) { drag = null; Object.assign(n, { state: 'fly', vx: 0, vy: 0, vr: 0, t: 0 }); }
+  tauri?.invoke('release');
+});
+
+// Shared by the debug menu and browser previews; choose a distinct sender from the registry.
+function previewReceive(action, sender = Object.keys(CHARACTERS).find(id => CHARACTERS[id] !== character())) {
+  return buddy.receive({ id: crypto.randomUUID(), from: 'preview-sender', to: buddy.id,
+    action, payload: { character: sender } });
+}
+
 // Browser preview: index.html?demo (add &char=croissant for another character)
 if (new URLSearchParams(location.search).has('demo')) {
   document.body.style.background = '#dfe3e8';
   nema({ mode: 'free', floor: innerHeight - 20 });
+  const preview = new URLSearchParams(location.search);
+  if (preview.has('receive')) previewReceive(preview.get('receive'), preview.get('sender') || undefined);
 }

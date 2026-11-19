@@ -6,6 +6,9 @@ use tauri::{
     App,
 };
 
+#[cfg(debug_assertions)]
+use tauri::{menu::Submenu, Manager};
+
 use crate::{autostart, characters, icons, presence};
 
 pub const TRAY: &str = "tray";
@@ -26,6 +29,14 @@ pub fn build(app: &App) -> tauri::Result<()> {
         &PredefinedMenuItem::separator(app)?,
         &quit,
     ])?;
+    #[cfg(debug_assertions)]
+    {
+        let debug = Submenu::new(app, "Debug", true)?;
+        for (action, label) in [("heart", "Receive a heart"), ("love", "Receive I love you"), ("together", "Receive Be together")] {
+            debug.append(&MenuItem::with_id(app, format!("preview:{action}"), label, true, None::<&str>)?)?;
+        }
+        menu.insert(&debug, 5)?;
+    }
     presence::set_summon_item(summon);
 
     TrayIconBuilder::with_id(TRAY)
@@ -39,6 +50,16 @@ pub fn build(app: &App) -> tauri::Result<()> {
                 "summon" => presence::toggle_summon(app),
                 "login" => { let _ = login.set_checked(autostart::toggle(app)); }
                 "quit" => app.exit(0),
+                #[cfg(debug_assertions)]
+                "preview:heart" | "preview:love" | "preview:together" => {
+                    let action = id.strip_prefix("preview:").unwrap();
+                    if action == "together" && presence::is_away() {
+                        presence::toggle_summon(app);
+                    }
+                    if let Some(w) = app.get_webview_window(presence::OVERLAY) {
+                        let _ = w.eval(&format!("previewReceive('{action}')"));
+                    }
+                }
                 _ => {
                     if let Some(c) = characters::PICKER.from_event(id) {
                         characters::apply(app, c);

@@ -18,6 +18,8 @@ overlay over your screen:
 - You can **grab and throw** him: gravity, spin, bounces off screen edges, he stands up and walks back.
 - **Click** him (a press under 5 px and 0.25 s) and a cel-shaded heart pops out above his head and floats away.
   A press that moves or lasts longer becomes a grab (`CLICK_PX`, `CLICK_S` in `overlay.js`).
+- **Right-click** opens a light segmented fan: Send a heart, Send I love you, Be together / Separate. Cloudflare support is
+  deployed, with its public endpoint in `src/backend.js`; Be together lassos in another registered character with a hand-drawn red rope.
 - Two **characters**: Nematode (the original) and Croissant. More will be added (see §6).
 - Five **app icons**, all fixed. **Soft Pink** (Croissant on the site pink) is the default; the dithered four show Nematode.
   The **menu bar icon** is the current character.
@@ -41,6 +43,8 @@ These came from direct feedback. Breaking them has cost real time before.
 - Verify before claiming. If something couldn't be tested (e.g. Windows on a real PC), say so plainly.
 
 **Design taste**
+- The owner approved the current hand-drawn gesture UI on November 19, 2026. Follow `DESIGN.md` for the palette,
+  font, geometry, animation and code-level techniques; preserve that look when extending it.
 - **Quiet, minimal, native.** No wordy UI, no decorative cards/gradients, one action per screen, one short line of copy.
   Design and *look at* every state (before/after, hints appearing, granted, errors) at the real size before shipping.
 - **Simple for non-technical people.** No Chrome extensions, no developer mode, no terminal steps for users.
@@ -66,6 +70,14 @@ These came from direct feedback. Breaking them has cost real time before.
 src/                          web code, bundled into the app (Tauri frontendDist)
   index.html                  overlay window shell: defines CHARACTERS, loads characters + overlay.js
   overlay.js                  behavior engine (never draws). Contract for characters at the top.
+  client.js                   addressed action envelopes with a replaceable transport
+  connection.js               automatic identity, durable queues, sync and receipts
+  backend.js                  public endpoint, configured after Terraform deployment
+  fan.js, fan.css              springing, hand-drawn segmented menu, generated from the action registry
+  fonts/                      bundled Lilita One font and its SIL Open Font License
+  speech.js                   animated hand-drawn speech bubbles
+  delivery.js                 received gestures carried in by the sender’s character
+  together.js                 visiting character, rope arrival and separation
   heart.js                    drawHeart(): the cel-shaded heart a click pops out (drawn by overlay.js)
   characters/nematode.js      drawNematode() + CHARACTERS.nematode adapter
   characters/croissant.js     drawCroissant() + CroissantJiggle + CHARACTERS.croissant adapter
@@ -85,6 +97,7 @@ src-tauri/                    native app (Rust, Tauri v2)
   src/grab.rs                 cursor polling / click-through toggling / focus hand-back (Tauri commands)
   src/screen.rs               monitor geometry (logical px, top-left origin)
   src/setup.rs                setup window + its commands
+  src/activity.rs             recent-input and unlocked-session checks before receiving
   src/autostart.rs            Open at Login (on by default the first time)
   src/update.rs               auto-update loop
   src/store.rs                tiny text files in the app data dir that remember choices
@@ -126,6 +139,7 @@ CHARACTERS[id] = {
   name, width, height,          rough on-screen px (edges, cursor distance, stomp height)
   dust,                         puff color
   gait: { hz, pace(phase) },    walk cycles/s and speed multiplier through the cycle
+  create?(),                   optional independent adapter for a visitor with mutable animation state
   draw(ctx, at, motion) -> Path2D (outline in screen px, used for hit-testing)
 }
 at     = { x, ground, face (1 right / -1 left), rot, accel: [ax, ay] px/s², dt, now, zoom? }
@@ -329,6 +343,8 @@ character" sections describe the architecture for humans.
 - First frame `dt = 0` → speeds divide by zero → NaN → character vanished. Clamp `dt >= 0.001`; spring ignores
   non-finite input.
 - One thrown exception used to kill the animation loop forever → `frame()` schedules the next frame and wraps `tick()`.
+- CSS scaling the fan SVG blurred it during the spring in WebKit. Animate internal SVG groups with
+  `animateTransform`; keep text unfiltered. See `DESIGN.md`.
 - WebKit suspended the inactive overlay → `backgroundThrottling: "disabled"`.
 - `killall Dock` to refresh icons → rejected (un-minimizes windows). Use the Dock tile plugin.
 - `npx tauri icon` output is not byte-reproducible; revert unrelated `icon.icns` churn before committing.
@@ -345,3 +361,51 @@ character" sections describe the architecture for humans.
 - Windows has never been run on a real PC (tab detection, updates, shortcut icons are compile-checked only).
 - No Apple Developer ID / notarization yet (owner's choice for now); no Windows code-signing certificate.
 - `Mac Dock tile`: users who pinned Nematode before v0.3.3 must re-pin once for the Dock icon to follow.
+
+### Local shared-gesture preview
+
+`overlay.js` owns the action registry (label, optional label lines, icon, optional visibility, playback, visit support). `ActionFan` divides a
+semicircle by the visible action count; it stays light in every system theme, flips below top-edge characters,
+and closes on outside click, Escape, resize or dismissal. Its outline uses continuous, gently uneven SVG curves for a visible hand-drawn wobble, leaving icons and text crisp. It springs open in 280 ms and folds closed in 180 ms unless reduced motion is enabled.
+Movement pauses while choosing or casting a rope. Lilita One is bundled locally (Google Fonts, SIL OFL,
+license in `src/fonts/OFL.txt`); nothing is installed system-wide or fetched at runtime.
+Normal click-hearts stay pink; Send a heart uses gold. Speech bubbles draw their outline and spring in their
+lettering; reduced motion removes that flourish.
+`Together` draws a visitor through the same character contract; `create()` isolates Croissant's springs.
+The preview visitor is another registered character, not a connected person. Separate lets it walk away.
+
+`BuddyClient.send(to, action, payload)` creates an id/from/to/action/payload envelope. Without a configured
+backend it returns `preview`. With `CloudConnection`, it returns `queued` after saving to local storage, then
+retries delivery. Null `to` asks the server's `resolveRecipient()` for the first other registered installation;
+explicit IDs remain supported. No pairing codes, accounts or user configuration. See `cloudflare/README.md`
+for protocol details, Terraform deployment and limits. Production was deployed through Terraform on 2026-11-19 at https://nematode-buddies.amaansyedali.workers.dev. Local credentials are in ignored `cloudflare/.env`; account settings and state are also ignored. Release 0.3.7 includes the public backend endpoint on both platforms.
+
+`CloudConnection` generates/persists an installation identity and credential automatically. D1 stores the
+credential hash, profiles, gestures and acknowledgements. Pending sends, downloaded messages and receipts
+are durable locally. Incoming heart/love events use the sender's character and acknowledge after the visit
+finishes. `activity::user_active` gates playback on recent input and an unlocked session. Unknown characters
+are retained pending an app update. Together/Separate applies the latest stored shared state; incoming Together
+summons a dismissed resident through `presence::summon_for_together`. Separate updates both clients on sync.
+A crash between display and receipt persistence can replay a gesture; favor not losing it. Normal retries use
+stable IDs and do not duplicate visits. Polling is five seconds, with error backoff up to thirty.
+
+Local debug builds have **Debug → Receive a heart / Receive I love you / Receive Be together** in the tray/menu bar. It sends a local receive event with
+a different registered character as sender, including when the resident is dismissed. Release builds omit the entire Debug submenu. Be together summons a dismissed resident first, waits for
+it to arrive, then casts the rope. Use Separate in the fan before replaying Be together.
+Browser preview: `index.html?demo&char=croissant&receive=heart&sender=nematode`.
+
+Run `node tests/social.mjs` for deterministic headless Chrome checks of the fan, visitor lifecycle and client
+boundary. Set `CHROME` to override the Chrome executable path. The test renders previews into the temp folder.
+
+Together mode keeps normal wandering, with the visitor following on the rope. Speech bubbles float up after
+a short reading beat while fading; reduced motion keeps them stationary. Debug receiving previews pick a
+different character from the registry (Nematode receives Croissant, and vice versa).
+
+### Backend checks
+
+`node tests/cloud.mjs` exercises Worker routes with real SQLite and persistent clients. For workerd/D1 and
+browser-to-backend tests, see `cloudflare/README.md`. Terraform validates without credentials; applying needs
+the owner's Cloudflare account/token. Do not put Cloudflare credentials in the app. The only bundled
+configuration is the public Worker URL. Debug previews and browser demo mode stay offline.
+
+Fan labels cannot be selected. Press-drag transfers the highlighted segment; release selects the segment under the pointer, and release outside cancels the press. Keyboard selection remains supported.

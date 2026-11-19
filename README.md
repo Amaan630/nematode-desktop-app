@@ -22,6 +22,7 @@
 - **Comes when called.** Choose **Summon** from the menu bar and he hangs out above your Dock, wandering around and sometimes running from your cursor. **Dismiss** sends him away.
 - **Can be thrown.** Grab him and fling him around. He tumbles, bounces off the edges of your screen, picks himself up and walks back.
 - **Likes you back.** Click him (a quick click, not a grab) and a heart pops out and floats away.
+- **A little together time.** Right-click for Send a heart, Send I love you, or Be together. The small hand-drawn fan springs open; sent hearts are gold and messages appear in a hand-drawn speech bubble. A red rope pulls in a companion; Separate sends them home. This checkout connects automatically to the Cloudflare backend and saves gestures for offline recipients.
 - **Two characters.** Nematode or Croissant, under **Character** in the menu bar. The menu bar icon follows your pick. Croissant waddles, and his ends jiggle when you fling him.
 - **Five app icons.** Choose one under **App Icon**. **Soft Pink** (the default, with Croissant), Pink & Blue,
   Acid, Halftone and Purple.
@@ -52,6 +53,14 @@ Built with [Tauri](https://tauri.app): one codebase for Mac and Windows. The cha
 src/
   index.html            the overlay: a transparent, click-through window over your screen
   overlay.js            behavior: where he goes, walking, stomping, physics, grabbing, dust, hearts
+  client.js             addressed actions
+  connection.js         automatic registration, durable offline queues and receipts
+  backend.js            public Cloudflare endpoint (set after deployment)
+  fan.js fan.css        the springing, hand-drawn right-click action menu
+  fonts/                locally bundled Lilita One and its license
+  speech.js             animated speech bubbles
+  delivery.js           the sender’s character bringing a received gesture
+  together.js           the visiting character and hand-drawn rope
   heart.js              the heart that floats up when you click him
   characters/*.js       one file per character: drawing + how it plays each moment
   setup.html            the one-time permission window
@@ -80,13 +89,15 @@ how high) and hands that to the current character, which draws it its own way.
    through its own `draw`. The site's favicon and preview card pick it up automatically too.
 4. Add one row to `src-tauri/src/characters.rs`.
 
+Characters with mutable animation state can supply `create()` to give visitors an independent adapter.
+
 A fixed app icon works the same way: one row in `src-tauri/src/icons.rs` and one entry in `scripts/icon.html` and
 `scripts/icons.sh`.
 
 ## Develop
 
 Working on the code (person or AI)? Start with [AGENTS.md](AGENTS.md): architecture, release process, testing and
-conventions in one place.
+conventions in one place. [DESIGN.md](DESIGN.md) records the approved visual style and how the code draws it.
 
 
 ```bash
@@ -97,6 +108,9 @@ npm run icons       # re-render every icon and preview from src/characters/
 ```
 
 To preview in a browser, serve `src/` and open `index.html?demo` (add `&char=croissant` for Croissant).
+Add `&receive=heart&sender=nematode` to preview a received golden heart carried in by Nematode.
+These previews use no server. In the local debug app, choose **Debug → Receive a heart / Receive I love you / Receive Be together** from the menu bar
+menu to see a different character walk in, give a gold heart, and leave. This test item is not in releases.
 
 ## Release
 
@@ -107,3 +121,10 @@ git tag v0.3.7 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.
+
+## Shared gestures
+
+The deployed app registers itself automatically and sends to the first other registered user. No accounts,
+codes or setup screens. Hearts and messages wait for the other person to return; Together/Separate restores
+the latest shared state. [Cloudflare setup and tests](cloudflare/README.md) are developer-only, using Terraform.
+The backend is deployed; this checkout includes its public endpoint. Existing released apps need an updated build to connect.

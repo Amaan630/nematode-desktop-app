@@ -1,0 +1,7 @@
+// Local runtime only. Terraform owns production resources and deployments.
+{
+  "name": "nematode-buddies-local",
+  "main": "worker.mjs",
+  "compatibility_date": "2025-09-01",
+  "d1_databases": [{ "binding": "DB", "database_name": "nematode-local", "database_id": "00000000-0000-0000-0000-000000000001" }]
+}

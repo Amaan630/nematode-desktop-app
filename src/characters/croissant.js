@@ -111,6 +111,7 @@ if (typeof CHARACTERS !== 'undefined') CHARACTERS.croissant = {
   name: 'Croissant', width: 100, height: 58, dust: '#d9964d', // golden crumbs
   gait: { hz: 2.2, pace: () => .75 },                          // steady waddle
   jiggle: new CroissantJiggle(),
+  create() { return { ...this, jiggle: new CroissantJiggle() }; }, // each visitor gets its own springs
   draw(ctx, at, m) {
     return drawCroissant(ctx, {
       x: at.x, ground: at.ground - m.hop, scale: 70 * (at.zoom ?? 1), face: at.face, rot: at.rot,

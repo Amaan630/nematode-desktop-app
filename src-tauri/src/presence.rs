@@ -159,3 +159,9 @@ pub fn refresh_menu() {
         let _ = item.set_enabled(m != Mode::OnTab);
     }
 }
+
+/// A newly received Together state brings a dismissed resident out, once per state change.
+#[tauri::command]
+pub fn summon_for_together(app: AppHandle) {
+    if is_away() { toggle_summon(&app); }
+}

@@ -1,0 +1,14 @@
+@font-face {
+  font-family: 'Lilita One'; src: url('fonts/LilitaOne-Regular.ttf') format('truetype'); font-weight: 400;
+  font-style: normal; font-display: swap;
+}
+.action-fan { position: fixed; z-index: 1; width: 256px; height: 148px; overflow: visible; -webkit-user-select: none; user-select: none; touch-action: none }
+.action-fan[hidden] { display: none }
+.action-fan > svg { overflow: visible }
+.action-fan .segment { fill: #fff9eb; stroke: #c57a88; stroke-width: 1.9; stroke-linejoin: round }
+.action-fan [role=menuitem] { color: #85324e; cursor: pointer; outline: none }
+.action-fan:not(.tracking) [role=menuitem]:hover .segment,
+.action-fan [role=menuitem].active .segment { fill: #ffe0e5 }
+.action-fan [role=menuitem]:focus-visible .segment { fill: #ffe0e5; stroke: #a63d60; stroke-width: 2.5 }
+.action-fan .symbol { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none }
+.action-fan text { fill: currentColor; font: 14px 'Lilita One', sans-serif; text-anchor: middle; pointer-events: none }

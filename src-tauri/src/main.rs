@@ -2,6 +2,7 @@
 //! Nematode: a desktop buddy who walks over to your Claude tab. The character itself lives in src/ (web);
 //! this is the native side. Each module has one job; startup order is below.
 
+mod activity;  // unlocked / recently active, for received gestures
 mod autostart;  // Open at Login
 mod characters; // Character menu: who's on screen
 mod grab;       // taking the mouse while you hold him, handing focus back after
@@ -24,6 +25,8 @@ fn main() {
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            activity::user_active,
+            presence::summon_for_together,
             grab::cursor,
             grab::set_grabbable,
             grab::release,

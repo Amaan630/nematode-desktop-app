@@ -1,5 +1,6 @@
 // A cel-shaded heart (flat fill, one hard shadow, bold outline, one glint), centered on (x, y), `size` px wide.
 const HEART_COLORS = { fill: '#ff5c8a', shade: '#e0316c', line: '#6e1534', glint: '#ffd6e3' };
+const GOLD_HEART_COLORS = { fill: '#ffcf50', shade: '#e5a52b', line: '#8b591d', glint: '#fff3be' };
 const HEART = (() => {
   const p = new Path2D();
   p.moveTo(0, -.2);
@@ -10,8 +11,7 @@ const HEART = (() => {
   return p;
 })();
 
-function drawHeart(ctx, x, y, size, rot = 0) {
-  const C = HEART_COLORS;
+function drawHeart(ctx, x, y, size, rot = 0, C = HEART_COLORS) {
   ctx.save();
   ctx.translate(x, y); ctx.rotate(rot); ctx.scale(size, size);
   ctx.lineJoin = ctx.lineCap = 'round';
