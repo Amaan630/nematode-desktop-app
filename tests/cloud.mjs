@@ -23,7 +23,7 @@ const db = {
     catch (e) { sqlite.exec('ROLLBACK'); throw e; }
   },
 };
-const env = {DB:db}, endpoint = process.env.BACKEND_TEST_URL || 'https://test.invalid';
+const env = {DB:db, LIVE:{idFromName:name=>name, get:()=>({fetch:async()=>new Response(null,{status:204})})}}, endpoint = process.env.BACKEND_TEST_URL || 'https://test.invalid';
 if (process.env.BACKEND_TEST_URL) assert(['localhost', '127.0.0.1'].includes(new URL(endpoint).hostname), 'Use a disposable local backend');
 const request = process.env.BACKEND_TEST_URL ? fetch : (url, options) => worker.fetch(new Request(url, options), env);
 const CloudConnection = vm.runInNewContext(readFileSync(new URL('../src/connection.js', import.meta.url), 'utf8') + ';CloudConnection', {

@@ -219,14 +219,16 @@ try {
       const sender = new CloudConnection(${JSON.stringify(backend.origin)}, {
         storage:storage(), character:()=> 'nematode', isActive:async()=>false, onGesture:()=>{}, onState:()=>{},
       });
-      await liveReceiver.cycle(); await sender.cycle();
+      liveReceiver.start(); await sender.cycle();
+      for(let i=0;i<200 && liveReceiver.socket?.readyState!==1;i++) await new Promise(r=>setTimeout(r,25));
+      check(liveReceiver.socket?.readyState===1, 'browser establishes authenticated WebSocket');
       await sender.send({id:crypto.randomUUID(), from:sender.state.id, to:liveReceiver.state.id, action:'love', payload:{character:'nematode'}});
       while(sender.running) await new Promise(r=>setTimeout(r,1));
-      await liveReceiver.cycle();
-      check(delivery.active, 'real HTTP gesture reaches overlay');
+      for(let i=0;i<200 && !delivery.active;i++) await new Promise(r=>setTimeout(r,25));
+      check(delivery.active, 'live notification delivers gesture to overlay');
       step(20);
     })()`);
-    await run(`(async()=>{await liveReceiver.cycle(); check(liveReceiver.state.inbox.length===0 && liveReceiver.state.receipts.length===0, 'overlay completion acknowledges real HTTP gesture')})()`);
+    await run(`(async()=>{while(liveReceiver.running) await new Promise(r=>setTimeout(r,1)); await liveReceiver.cycle(); liveReceiver.stop(); check(liveReceiver.state.inbox.length===0 && liveReceiver.state.receipts.length===0, 'overlay completion acknowledges real HTTP gesture')})()`);
   }
   console.log('Passed: fan actions, edge placement, dismissal, both visitors, rope lifecycle, gold delivery, temporary summon, reduced motion and client routing.');
 } finally {

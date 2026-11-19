@@ -1,6 +1,6 @@
 # Nematode's shared gestures
 
-Terraform owns the Worker, its workers.dev endpoint and D1 database. There are no accounts, pairing screens,
+Terraform owns the Worker, its workers.dev endpoint, a hibernating WebSocket Durable Object and D1 database. There are no accounts, pairing screens,
 codes or per-person installation steps. The public endpoint is baked into both app builds after deployment.
 Deployed on 2026-11-19 at https://nematode-buddies.amaansyedali.workers.dev; this checkout includes that public endpoint.
 
@@ -48,8 +48,15 @@ production; its configuration here is only for local runtime testing.
   exactly-once visual playback. Delivered action rows are retained for idempotency; there is no pruning yet.
 - Together/Separate is derived from the newest stored state action between the two clients. Returning clients
   apply only the latest state. The peer's current character comes from its profile, updated automatically.
-- Polling is every five seconds while healthy, backing off to thirty seconds after errors. It is near-real-time,
-  not frame-synchronized. No server credentials, gestures or network calls appear in the setup UI.
+- A hibernating `LiveHub` Durable Object sends authenticated WebSocket notifications after registration,
+  profile changes and stored actions. The app fetches D1 data on connection, notification, send or receipt;
+  idle apps do not poll HTTP. Existing polling clients remain compatible during updates.
+- The socket sends a small ping every 30 seconds; Cloudflare auto-responds without waking the object.
+  A missing pong or stale connection after sleep triggers reconnect and catch-up. Failures back off to 30
+  seconds. A one-second local timer checks activity and pending work; it makes no idle network requests.
+- Credentials travel in the WebSocket subprotocol header, never URL parameters. Only `nematode` is echoed
+  in the handshake. The Worker authenticates the device before the hub tags its socket; notifications contain
+  no user data, and D1 requests still require the device credential. No setup changes for either person.
 
 `src/backend.js` contains the deployed public endpoint. An empty value disables networking for local-only previews. Browser `?demo` and Debug receive
 commands also stay local; they never register test users or send gestures. Identity, pending sends, downloaded
@@ -70,10 +77,12 @@ For Cloudflare's actual local Worker/D1 runtime, install Wrangler as a developme
 disposable database for each run (the routing tests deliberately expect no pre-existing users):
 
 ```sh
-npx wrangler dev --config cloudflare/wrangler.jsonc --local --port 8787 --persist-to "$(mktemp -d)"
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx wrangler dev --config cloudflare/wrangler.jsonc --local --port 8787 --persist-to "$(mktemp -d)"
 # In another terminal:
 BACKEND_TEST_URL=http://localhost:8787 node tests/cloud.mjs
 BACKEND_TEST_URL=http://localhost:8787 node tests/social.mjs
+# Use another fresh runtime/database for live connection tests:
+BACKEND_TEST_URL=http://localhost:8787 node tests/live.mjs
 ```
 
 The tests cover first-other routing, no recipient yet, explicit addressing, offline sender restart, inactive

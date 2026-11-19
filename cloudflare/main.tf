@@ -38,10 +38,15 @@ resource "cloudflare_workers_script" "buddies" {
   content_file       = "${path.module}/worker.mjs"
   content_sha256     = filesha256("${path.module}/worker.mjs")
   compatibility_date = "2025-09-01"
+  migrations         = { new_tag = "live-v1", new_sqlite_classes = ["LiveHub"] }
   bindings = [{
     name = "DB"
     type = "d1"
     id   = cloudflare_d1_database.buddies.id
+    }, {
+    name       = "LIVE"
+    type       = "durable_object_namespace"
+    class_name = "LiveHub"
   }]
 }
 

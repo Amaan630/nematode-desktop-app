@@ -1,6 +1,7 @@
-// Durable local queues plus a small HTTP transport. Registration is automatic; nobody enters a code.
+// Durable local queues plus WebSocket wake-ups and HTTP delivery. Registration is automatic; nobody enters a code.
 class CloudConnection {
-  constructor(url, { storage = localStorage, fetch = globalThis.fetch.bind(globalThis), character, isActive, canPlay = () => true, onGesture, onState }) {
+  constructor(url, { storage = localStorage, fetch = globalThis.fetch.bind(globalThis), character, isActive, canPlay = () => true, onGesture, onState, WebSocket = globalThis.WebSocket }) {
+    this.WebSocket = WebSocket; this.stopped = true; this.needsSync = true; this.retryAt = 0; this.delay = 1000;
     this.url = url.replace(/\/$/, ''); this.storage = storage; this.fetch = fetch;
     this.character = character; this.isActive = isActive; this.canPlay = canPlay; this.onGesture = onGesture; this.onState = onState;
     this.key = `nematode-cloud:${this.url}`;
@@ -34,7 +35,7 @@ class CloudConnection {
   async send(event) {
     if (event.from !== this.state.id) throw new Error('Wrong sender');
     this.save({ ...this.state, outbox: [...this.state.outbox, event] });
-    void this.cycle().catch(() => {}); // the queue is already saved; the polling loop retries failures
+    void this.cycle().catch(() => {}); // the queue is already saved; the connection loop retries failures
     return { status: 'queued' };
   }
 
@@ -57,11 +58,12 @@ class CloudConnection {
     if (await this.isActive()) this.save({ ...this.state, inbox: this.state.inbox.filter(e => e.id !== id),
       receipts: [...new Set([...this.state.receipts, id])] });
     this.playing = null;
+    this.needsSync = true;
   }
 
   async cycle() {
-    if (this.running) return;
-    this.running = true;
+    if (this.running) { this.needsSync = true; return; }
+    this.running = true; this.needsSync = false;
     try {
       const active = await this.isActive();
       this.applyState(active);
@@ -70,6 +72,7 @@ class CloudConnection {
       if (this.profile !== character) {
         await this.request('/register', { character }); this.profile = character;
       }
+      if (!this.stopped && !this.socket) this.connect();
       // Keep action ordering, including Together then Separate; retries use the same event ID.
       for (const event of [...this.state.outbox]) {
         await this.request('/actions', event);
@@ -87,18 +90,67 @@ class CloudConnection {
       this.save({ ...this.state, inbox: [...this.state.inbox, ...events], together: sync.together });
       this.applyState(active);
       await this.playNext();
+      if (this.stopped || this.socket?.readyState === 1) { this.retryAt = 0; this.delay = 1000; }
+    } catch (e) {
+      this.needsSync = true;
+      this.retryAt = Date.now() + this.delay;
+      this.delay = Math.min(30000, this.delay * 2);
+      throw e;
     } finally { this.running = false; }
   }
 
-  start() {
-    this.stopped = false;
-    const poll = async () => {
-      try { await this.cycle(); this.delay = 5000; }
-      catch (e) { console.warn(e.message); this.delay = Math.min(30000, (this.delay || 2500) * 2); }
-      if (!this.stopped) this.timer = setTimeout(poll, this.delay);
+  connect() {
+    // Subprotocol headers carry the credential, never a URL query string or a logged message.
+    const socket = new this.WebSocket(this.url.replace(/^http/, 'ws') + '/live',
+      ['nematode', `device.${this.state.id}.${this.state.secret}`]);
+    this.socket = socket; this.connectedAt = Date.now(); this.lastPing = 0;
+    const disconnected = () => {
+      if (this.socket !== socket) return;
+      this.socket = null; this.needsSync = true;
+      this.retryAt = Date.now() + this.delay;
+      this.delay = Math.min(30000, this.delay * 2);
     };
-    void poll();
+    socket.onopen = () => { if (this.socket === socket) this.lastPong = this.lastPing = Date.now(); };
+    socket.onmessage = ({ data }) => {
+      if (this.socket !== socket) return;
+      if (data === 'pong') this.lastPong = Date.now();
+      if (data === 'sync') {
+        this.needsSync = true;
+        void this.cycle().catch(() => {});
+      }
+    };
+    socket.onclose = disconnected;
+    socket.onerror = () => { disconnected(); socket.close(); };
   }
 
-  stop() { this.stopped = true; clearTimeout(this.timer); }
+  async tick() {
+    const now = Date.now(), socket = this.socket;
+    if (socket && ((socket.readyState === 0 && now - this.connectedAt > 10000)
+        || (socket.readyState === 1 && (now - this.lastPong > 60000
+          || (this.lastPing > this.lastPong && now - this.lastPing > 10000))))) {
+      this.socket = null; socket.close(); this.needsSync = true; this.retryAt = 0;
+    } else if (socket?.readyState === 1 && now - this.lastPing >= 30000) {
+      this.lastPing = now; socket.send('ping'); // Cloudflare answers without waking the hibernating object
+    }
+    // Local activity checks never make network requests. Saved gestures can play offline.
+    this.applyState(await this.isActive());
+    await this.playNext();
+    if (!this.running && now >= this.retryAt && (this.needsSync || !this.socket
+        || this.profile !== this.character() || this.state.outbox.length || this.state.receipts.length)) await this.cycle();
+  }
+
+  start() {
+    if (!this.stopped) return;
+    this.stopped = false;
+    const loop = async () => {
+      try { await this.tick(); } catch (e) { console.warn(e.message); }
+      if (!this.stopped) this.timer = setTimeout(loop, 1000);
+    };
+    void loop();
+  }
+
+  stop() {
+    this.stopped = true; clearTimeout(this.timer);
+    const socket = this.socket; this.socket = null; socket?.close();
+  }
 }

@@ -378,7 +378,7 @@ The preview visitor is another registered character, not a connected person. Sep
 backend it returns `preview`. With `CloudConnection`, it returns `queued` after saving to local storage, then
 retries delivery. Null `to` asks the server's `resolveRecipient()` for the first other registered installation;
 explicit IDs remain supported. No pairing codes, accounts or user configuration. See `cloudflare/README.md`
-for protocol details, Terraform deployment and limits. Production was deployed through Terraform on 2026-11-19 at https://nematode-buddies.amaansyedali.workers.dev. Local credentials are in ignored `cloudflare/.env`; account settings and state are also ignored. Release 0.3.7 includes the public backend endpoint on both platforms.
+for protocol details, Terraform deployment and limits. Production was deployed through Terraform on 2026-11-19 at https://nematode-buddies.amaansyedali.workers.dev. Local credentials are in ignored `cloudflare/.env`; account settings and state are also ignored. Release 0.3.7 introduced the public backend endpoint on both platforms; 0.3.8 replaces idle HTTP polling with hibernating WebSocket notifications.
 
 `CloudConnection` generates/persists an installation identity and credential automatically. D1 stores the
 credential hash, profiles, gestures and acknowledgements. Pending sends, downloaded messages and receipts
@@ -387,7 +387,7 @@ finishes. `activity::user_active` gates playback on recent input and an unlocked
 are retained pending an app update. Together/Separate applies the latest stored shared state; incoming Together
 summons a dismissed resident through `presence::summon_for_together`. Separate updates both clients on sync.
 A crash between display and receipt persistence can replay a gesture; favor not losing it. Normal retries use
-stable IDs and do not duplicate visits. Polling is five seconds, with error backoff up to thirty.
+stable IDs and do not duplicate visits. Hibernating WebSockets notify apps when data changes; HTTP fetches happen on connection, notifications and pending work, never on an idle interval. Keepalives run every thirty seconds without waking the Durable Object. Reconnects catch up from D1; failures back off up to thirty seconds. A local one-second timer checks activity without polling the server.
 
 Local debug builds have **Debug → Receive a heart / Receive I love you / Receive Be together** in the tray/menu bar. It sends a local receive event with
 a different registered character as sender, including when the resident is dismissed. Release builds omit the entire Debug submenu. Be together summons a dismissed resident first, waits for

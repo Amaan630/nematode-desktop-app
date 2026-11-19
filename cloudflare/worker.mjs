@@ -1,3 +1,35 @@
+// One hibernating hub carries wake-up notifications; D1 remains the source of truth.
+export class LiveHub {
+  constructor(ctx) {
+    this.ctx = ctx;
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+  }
+
+  async fetch(request) {
+    if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+      const [client, server] = Object.values(new WebSocketPair());
+      this.ctx.acceptWebSocket(server, [request.headers.get('X-Client-ID')]);
+      server.send('sync'); // catches anything stored before the connection was established
+      return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': 'nematode' } });
+    }
+    const ids = await request.json();
+    const sockets = ids ? ids.flatMap(id => this.ctx.getWebSockets(id)) : this.ctx.getWebSockets();
+    for (const socket of new Set(sockets)) {
+      try { socket.send('sync'); } catch { socket.close(); }
+    }
+    return new Response(null, { status: 204 });
+  }
+
+  webSocketMessage(socket) { socket.close(1008, 'Unexpected message'); }
+  webSocketClose(socket, code) { socket.close(code === 1000 ? 1000 : 1001); }
+  webSocketError(socket) { socket.close(); }
+}
+const hub = env => env.LIVE.get(env.LIVE.idFromName('buddies'));
+async function notify(env, ids = null) {
+  const response = await hub(env).fetch('https://live/notify', { method: 'POST', body: JSON.stringify(ids) });
+  if (!response.ok) throw new Error('Live notification failed');
+}
+
 // The first other installation is the recipient. Keep this policy in one place.
 export async function resolveRecipient(db, sender, requested = null) {
   return requested
@@ -49,7 +81,11 @@ export default {
       const url = new URL(request.url), db = env.DB;
       if (request.method === 'GET' && url.pathname === '/health') return json({ ok: true });
       if (Number(request.headers.get('content-length')) > 8192) fail(413, 'Request too large');
-      const auth = request.headers.get('authorization')?.match(/^Bearer ([^:]+):([0-9a-f]{64})$/);
+      const live = url.pathname === '/live' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket';
+      const protocols = request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(s => s.trim()) || [];
+      const device = live && protocols.includes('nematode') && protocols.find(p => p.startsWith('device.'));
+      const credential = device ? `Bearer ${device.slice(7).replace('.', ':')}` : request.headers.get('authorization');
+      const auth = credential?.match(/^Bearer ([^:]+):([0-9a-f]{64})$/);
       if (!auth || !uuid(auth[1])) fail(401, 'Invalid device credential');
       const [, id, secret] = auth, secretHash = await hash(secret);
       if (!initialized.has(db)) {
@@ -62,13 +98,15 @@ export default {
         // Idempotent registration survives a lost response without creating a second user.
         await db.prepare('INSERT INTO clients(id, secret_hash, character) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING')
           .bind(id, secretHash, data.character).run();
-        const owner = await db.prepare('SELECT secret_hash FROM clients WHERE id = ?').bind(id).first();
+        const owner = await db.prepare('SELECT secret_hash, character FROM clients WHERE id = ?').bind(id).first();
         if (owner.secret_hash !== secretHash) fail(401, 'Invalid device credential');
         await db.prepare('UPDATE clients SET character = ? WHERE id = ? AND character != ?').bind(data.character, id, data.character).run();
+        await notify(env); // registration also wakes senders waiting for their first recipient
         return json({ id });
       }
       const owner = await db.prepare('SELECT secret_hash FROM clients WHERE id = ?').bind(id).first();
       if (!owner || owner.secret_hash !== secretHash) fail(401, 'Invalid device credential');
+      if (live) return hub(env).fetch(new Request('https://live/connect', { headers: { Upgrade: 'websocket', 'X-Client-ID': id } }));
       if (request.method === 'POST' && url.pathname === '/actions') {
         const data = await body(request);
         if (!uuid(data.id) || !supported.has(data.action) || !character(data.payload?.character)
@@ -77,6 +115,7 @@ export default {
         if (existing) {
           if (existing.sender !== id || existing.action !== data.action || existing.character !== data.payload.character
               || (data.to != null && existing.recipient !== data.to)) fail(409, 'Action ID already used');
+          await notify(env, [id, existing.recipient]);
           return json({ id: data.id, to: existing.recipient });
         }
         const peer = await resolveRecipient(db, id, data.to);
@@ -86,6 +125,7 @@ export default {
         const stored = await db.prepare('SELECT sender, recipient, action, character FROM actions WHERE id = ?').bind(data.id).first();
         if (stored.sender !== id || stored.action !== data.action || stored.character !== data.payload.character
             || stored.recipient !== peer.id) fail(409, 'Action ID already used');
+        await notify(env, [id, peer.id]);
         return json({ id: data.id, to: peer.id });
       }
       if (request.method === 'GET' && url.pathname === '/sync') {
