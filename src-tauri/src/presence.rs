@@ -46,7 +46,12 @@ pub fn init(app: &App) -> tauri::Result<WebviewWindow> {
     crate::mac::float_above_menu_bar(win.ns_window()?);
     let (r, _) = screen::monitor_at(&win, 0.0, 0.0);
     screen::place(&win, r);
-    STATE.lock().unwrap().screen = r;
+    let summoned = crate::update::restore_summoned(app.handle());
+    {
+        let mut s = STATE.lock().unwrap();
+        s.screen = r;
+        s.summoned = summoned;
+    }
     win.show()?;
     Ok(win)
 }
@@ -73,6 +78,10 @@ pub fn set_summon_item(item: MenuItem<Wry>) {
 /// The overlay's monitor (logical px), for converting the cursor into overlay coordinates.
 pub fn screen() -> Rect {
     STATE.lock().unwrap().screen
+}
+
+pub fn is_summoned() -> bool {
+    STATE.lock().unwrap().summoned
 }
 
 pub fn is_away() -> bool {

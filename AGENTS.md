@@ -219,8 +219,9 @@ else is applied on top.
 **Open at Login (`autostart.rs`)**: LaunchAgent (macOS) / Run key (Windows); enabled on first run only, then the
 menu checkbox rules.
 
-**Updates (`update.rs`)**: checks `latest.json` at launch and every 24 h, installs signed updates, relaunches only
-when he's Away (never yanks him mid-stomp).
+**Updates (`update.rs`)**: checks `latest.json` at launch and every 24 h, installs signed updates, and immediately
+relaunches. A one-use `update-summoned` file restores a summoned character after the restart (saved before
+installation because the Windows installer exits the app). Ordinary launches do not restore summoning.
 
 ### 4.3 Signing and permissions (macOS)
 

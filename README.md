@@ -26,7 +26,7 @@
 - **Two characters.** Nematode or Croissant, under **Character** in the menu bar. The menu bar icon follows your pick. Croissant waddles, and his ends jiggle when you fling him.
 - **Five app icons.** Choose one under **App Icon**. **Soft Pink** (the default, with Croissant), Pink & Blue,
   Acid, Halftone and Purple.
-- **Stays out of the way.** He lives in the menu bar, opens at login and updates himself.
+- **Stays out of the way.** He lives in the menu bar, opens at login and updates himself, returning after an update if he was summoned.
 
 <p align="center">
   <img src="build/icon-soft.png" width="96" alt="Soft Pink icon">
@@ -117,7 +117,7 @@ menu to see a different character walk in, give a gold heart, and leave. This te
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit, then tag it:
 
 ```bash
-git tag v0.3.9 && git push --tags
+git tag v0.3.10 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.
