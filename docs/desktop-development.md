@@ -9,7 +9,7 @@ npm run desktop-dev
 This builds a development copy, signs it with Nematode's stable macOS identity, pauses the installed app,
 and opens the development copy on your desktop. Your `/Applications/Nematode.app` stays untouched.
 The character starts summoned. Use the menu bar's **Hat** menu to try Pink beret, Blue baseball cap,
-Cloud beanie, Ribbon sun hat, or No hat. **Character** switches between Nematode and Croissant.
+Cloud beanie, Ribbon sun hat, or No hat. **Character** switches between Nematode, Croissant, and Kitten.
 
 Save a file under `src/` to reload the actual desktop overlay. No rebuild is needed for JavaScript, CSS,
 HTML, or fonts. Reloading restarts the current animation and restores the native Summon/Tab state and
@@ -40,3 +40,7 @@ The launcher builds before closing the installed app, and restores it when the d
 
 Checks: `node tests/desktop-dev.mjs` tests the server and reload event; `node tests/social.mjs` tests the
 fan, gestures, and hat hit areas at Retina scale. `scripts/hats.html` renders all hat designs on both characters.
+
+**Character → Kitten** is the approved orange tabby with a staggered four-paw walk, sage-green eyes,
+and fitted hats. `src/characters/kitten.js` uses the same character/appearance contract in the app,
+playground, website, shared gestures, and menu previews.

@@ -20,7 +20,7 @@ overlay over your screen:
   A press that moves or lasts longer becomes a grab (`CLICK_PX`, `CLICK_S` in `overlay.js`).
 - **Right-click** opens a light segmented fan: Send a heart, Send I love you, Be together / Separate. Cloudflare support is
   deployed, with its public endpoint in `src/backend.js`; Be together lassos in another registered character with a hand-drawn red rope.
-- Two **characters**: Nematode (the original) and Croissant. More will be added (see §6).
+- Three **characters**: Nematode (the original), Croissant, and Kitten. More will be added (see §6).
 - Five **app icons**, all fixed. **Soft Pink** (Croissant on the site pink) is the default; the dithered four show Nematode.
   The **menu bar icon** is the current character.
 - Opens at login, **auto-updates** from GitHub Releases, one-time **Accessibility** permission on macOS.
@@ -276,7 +276,7 @@ Update signing key: `~/.tauri/nematode.key` (+ `.pub`, embedded in `tauri.conf.j
 - `site/index.html`, pink + cream. Platform-aware button: Mac → "Download for Mac", Windows → "Download for Windows"
   (+ link to the other), phones/tablets (incl. iPads reporting "Mac" with touch) → **"Send to your computer"**
   (share sheet, else copy link) and **no download links**, other computers → both links. Live version from the GitHub
-  API. A **character toggle** (Nematode/Croissant, remembered in localStorage) picks who walks in, hops onto the
+  API. A **character toggle** (Nematode/Croissant/Kitten, remembered in localStorage) picks who walks in, hops onto the
   button and stomps — drawn by the same `src/characters/*.js` adapters with the same `motion` shape.
   Reduced motion: he just stands on the button.
 - `pages.yml` deploys on changes to the site, characters, icons, the card or the favicon page: copies
@@ -439,3 +439,10 @@ Hat menu icons come from `npm run icons:hats` (also part of `npm run icons`); th
 The blue baseball cap uses dark blue ink (`#173b78`) for every outline and seam, specified by its `ink` field in the hat registry.
 
 Release 0.3.9 includes shared appearances, four hats with menu previews, and the documented desktop-dev launcher. Production builds omit the desktop-dev feature and retain normal auto-updates.
+
+**Character → Kitten** is the approved orange tabby with a staggered four-paw walk, sage-green eyes,
+and fitted hats. `src/characters/kitten.js` uses the same character/appearance contract in the app,
+playground, website, shared gestures, and menu previews.
+
+- macOS activity uses `kCGSSessionOnConsoleKey` (double S after CG), as returned by
+  `CGSessionCopyCurrentDictionary`. The similarly spelled `kCGSessionOnConsoleKey` is absent and blocks all receiving.

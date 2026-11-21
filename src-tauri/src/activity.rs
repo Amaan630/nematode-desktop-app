@@ -14,7 +14,7 @@ pub fn user_active() -> bool {
             if session.is_null() { return false; }
             let session: CFDictionary<CFString, CFType> = CFDictionary::wrap_under_create_rule(session);
             let flag = |key: &str| session.find(&CFString::new(key)).and_then(|v| v.downcast::<CFBoolean>()).map(bool::from);
-            return flag("kCGSessionOnConsoleKey") == Some(true)
+            return flag("kCGSSessionOnConsoleKey") == Some(true)
                 && flag("CGSSessionScreenIsLocked") != Some(true)
                 && CGEventSourceSecondsSinceLastEventType(0, u32::MAX) < 60.0;
         }

@@ -23,7 +23,7 @@
 - **Can be thrown.** Grab him and fling him around. He tumbles, bounces off the edges of your screen, picks himself up and walks back.
 - **Likes you back.** Click him (a quick click, not a grab) and a heart pops out and floats away.
 - **A little together time.** Right-click for Send a heart, Send I love you, or Be together. The small hand-drawn fan springs open; sent hearts are gold and messages appear in a hand-drawn speech bubble. A red rope pulls in a companion; Separate sends them home. This checkout connects automatically through WebSockets for live gestures and saves them for offline recipients.
-- **Two characters.** Nematode or Croissant, under **Character** in the menu bar. The menu bar icon follows your pick. Croissant waddles, and his ends jiggle when you fling him.
+- **Three characters.** Nematode, Croissant or Kitten, under **Character** in the menu bar. The menu bar icon follows your pick. Croissant waddles, and his ends jiggle when you fling him. Kitten is an orange tabby with sage-green eyes and a four-paw walk.
 - **Five app icons.** Choose one under **App Icon**. **Soft Pink** (the default, with Croissant), Pink & Blue,
   Acid, Halftone and Purple.
 - **Stays out of the way.** He lives in the menu bar, opens at login and updates himself, returning after an update if he was summoned.
@@ -117,7 +117,7 @@ menu to see a different character walk in, give a gold heart, and leave. This te
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit, then tag it:
 
 ```bash
-git tag v0.3.10 && git push --tags
+git tag v0.3.11 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.

@@ -21,6 +21,7 @@ macro_rules! characters {
 characters![
     ("nematode", "Nematode"), // the default
     ("croissant", "Croissant"),
+    ("kitten", "Kitten"),
 ];
 
 static CURRENT: Mutex<Option<&'static Choice>> = Mutex::new(None);

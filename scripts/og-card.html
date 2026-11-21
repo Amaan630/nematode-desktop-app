@@ -18,6 +18,7 @@
 <script>const CHARACTERS = {};</script>
 <script src="../src/characters/nematode.js"></script>
 <script src="../src/characters/croissant.js"></script>
+<script src="../src/characters/kitten.js"></script>
 <script>
 // Fonts differ by machine (CI's Linux font is wider than macOS's): shrink the text until it fits its column.
 for (const [el, max] of [[document.querySelector('h1'), 560], [document.querySelector('p'), 520]]) {
@@ -28,8 +29,9 @@ for (const [el, max] of [[document.querySelector('h1'), 560], [document.querySel
 const x = document.querySelector('canvas').getContext('2d'); x.scale(2, 2);
 const idle = { state: 'idle', phase: 0, t: 0, stretch: 1, hop: 0, crouch: 0, impact: 0, airborne: false };
 const at = (px, ground, zoom, face) => ({ x: px, ground, face, rot: 0, accel: [0, 0], dt: 1 / 60, now: 1000, zoom }); // eyes open
-// A cream floor for the two of them to stand on.
+// A cream floor for the three of them to stand on.
 x.fillStyle = '#fff7ec'; x.beginPath(); x.ellipse(905, 520, 250, 36, 0, 0, 7); x.fill();
-CHARACTERS.nematode.draw(x, at(780, 520, 4.3, 1), idle);
-CHARACTERS.croissant.draw(x, at(990, 520, 2.6, -1), idle);
+CHARACTERS.nematode.draw(x, at(735, 520, 3.2, 1), idle);
+CHARACTERS.croissant.draw(x, at(885, 520, 1.9, -1), idle);
+CHARACTERS.kitten.draw(x, at(1060, 520, 1.7, -1), idle);
 </script>
