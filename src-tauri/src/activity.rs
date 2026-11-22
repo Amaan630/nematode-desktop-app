@@ -21,6 +21,7 @@ pub fn user_active() -> bool {
     }
     #[cfg(windows)]
     {
+        if crate::fullscreen::active() { return false; }
         use windows::Win32::{Foundation::HANDLE, System::{StationsAndDesktops::*, SystemInformation::GetTickCount},
             UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO}};
         unsafe {

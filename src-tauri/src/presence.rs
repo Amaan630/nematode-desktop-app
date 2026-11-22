@@ -58,16 +58,28 @@ pub fn init(app: &App) -> tauri::Result<WebviewWindow> {
 
 /// Watches for your Claude tab four times a second.
 pub fn spawn(win: WebviewWindow) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_millis(250));
-        if let Some(spot) = locate() {
-            let mut s = STATE.lock().unwrap();
-            s.spot = spot;
-            if spot.is_none() {
-                s.snoozed = false; // you left Claude: next visit brings him back
+    std::thread::spawn(move || {
+        #[cfg(windows)]
+        let mut hidden = false;
+        loop {
+            std::thread::sleep(Duration::from_millis(250));
+            if let Some(spot) = locate() {
+                let mut s = STATE.lock().unwrap();
+                s.spot = spot;
+                if spot.is_none() {
+                    s.snoozed = false; // you left Claude: next visit brings him back
+                }
             }
+            #[cfg(windows)]
+            {
+                let fullscreen = crate::fullscreen::active();
+                if fullscreen != hidden {
+                    let result = if fullscreen { win.hide() } else { win.show() };
+                    if result.is_ok() { hidden = fullscreen; }
+                }
+            }
+            sync(&win);
         }
-        sync(&win);
     });
 }
 

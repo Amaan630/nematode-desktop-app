@@ -446,3 +446,9 @@ playground, website, shared gestures, and menu previews.
 
 - macOS activity uses `kCGSSessionOnConsoleKey` (double S after CG), as returned by
   `CGSessionCopyCurrentDictionary`. The similarly spelled `kCGSessionOnConsoleKey` is absent and blocks all receiving.
+
+### Windows fullscreen
+`fullscreen.rs` compares the foreground client area with its monitor in physical pixels, ignoring our own
+window, the desktop, and minimized windows. The presence poll hides/shows the overlay without changing
+summon state. Ordinary maximized/snapped windows do not suppress it. The activity gate also defers incoming
+gestures during fullscreen, so hidden animations are not acknowledged. macOS is unchanged.

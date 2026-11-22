@@ -5,6 +5,8 @@
 mod activity;  // unlocked / recently active, for received gestures
 mod autostart;  // Open at Login
 mod characters; // Character menu: who's on screen
+#[cfg(any(windows, test))]
+mod fullscreen; // hide the Windows overlay while a foreground app is fullscreen
 mod grab;       // taking the mouse while you hold him, handing focus back after
 mod hats;       // a remembered hat for either character
 mod icons;      // App Icon menu: Finder/Dock on macOS, tray/shortcuts on Windows
