@@ -12,11 +12,12 @@ const wait = async condition => {
   for (let i = 0; i < 200; i++) { if (await condition()) return; await new Promise(r=>setTimeout(r,50)); }
   throw new Error('Timed out waiting for live delivery');
 };
+const updates = [];
 const requests = [], played = [], stores = [memory(),memory()];
 let active = true, offline = false, aliceCharacter = 'nematode', aliceHat = 'cap';
 const options = (storage, character) => ({ storage, character, isActive:async()=>active,
   fetch:async (...args)=>{ requests.push(args[0]); if(offline) throw new Error('offline'); return fetch(...args); },
-  onGesture:(event,done)=>played.push({event,done}), onState:()=>{},
+  onGesture:(event,done)=>played.push({event,done}), onState:()=>{}, onUpdate:version=>updates.push(version),
 });
 const alice = new CloudConnection(endpoint, {...options(stores[0],()=>aliceCharacter),appearance:()=>({character:aliceCharacter,accessories:{hat:aliceHat}})});
 let bob = new CloudConnection(endpoint, options(stores[1],()=> 'croissant'));
@@ -57,6 +58,9 @@ try {
   await played.at(-1).done();
   await alice.send(event('together')); await wait(()=>bob.state.together.active);
   aliceHat='sunhat'; await wait(()=>bob.state.together.peer.appearance.accessories.hat==='sunhat');
+  const picnic=event('scene'); picnic.payload.state={mode:'picnic',future:{cozy:true}};
+  await alice.send(picnic); await wait(()=>bob.state.together.scene?.mode==='picnic');
+  assert.equal(bob.state.together.scene.future.cozy,true);
   await alice.send(event('separate')); await wait(()=>!bob.state.together.active);
   aliceCharacter='croissant'; await wait(()=>bob.peer?.character==='croissant');
   // A stale connection after sleep is replaced, then sync catches any missed notifications.
@@ -74,5 +78,17 @@ try {
   let rejected=false; bad.onerror=()=>{rejected=true;};
   await wait(()=>rejected); bad.close();
   assert.equal(played.filter(p=>p.event.id===heart.id).length,1);
+  // The local hook verifies the real published manifest, but only notifies these disposable clients.
+  if (process.env.TEST_RELEASE_VERSION) {
+    bob.stop();
+    const version=process.env.TEST_RELEASE_VERSION, count=updates.length;
+    const response=await fetch(endpoint+'/release',{method:'POST',headers:{Authorization:'Bearer local-release-test','Content-Type':'application/json'},body:JSON.stringify({version})});
+    assert.equal(response.status,200,await response.text());
+    await wait(()=>updates.length>count && updates.includes(version));
+    const liveCount=updates.length;
+    bob=new CloudConnection(endpoint,options(stores[1],()=> 'croissant')); bob.start();
+    await wait(()=>updates.length>liveCount);
+    assert.equal(updates.at(-1),version,'offline receiver learns the release on reconnect');
+  }
   console.log('Passed: idle without polling, heartbeat, live gestures/state/profile, offline catch-up, activity gating, stale-socket reconnect, retry, and socket authentication.');
 } finally { alice.stop(); bob.stop(); }

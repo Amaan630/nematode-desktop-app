@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><title>Picnic composition preview</title>
+<style>@font-face{font-family:Lilita;src:url('../src/fonts/LilitaOne-Regular.ttf')}body{margin:0;background:#fff9eb;color:#85324e}canvas{display:block}button{font:16px Lilita;background:#fff9eb;border:1px solid #c57a88;border-radius:8px;padding:8px;position:fixed;right:12px;bottom:12px}</style>
+<canvas width="1000" height="850"></canvas><button onclick="paused=!paused;this.textContent=paused?'Play':'Pause'">Pause</button>
+<script>const CHARACTERS={};</script><script src="../src/hats.js"></script>
+<script src="../src/characters/nematode.js"></script><script src="../src/characters/croissant.js"></script><script src="../src/characters/kitten.js"></script>
+<script src="../src/appearance.js"></script><script src="../src/heart.js"></script><script src="../src/picnic.js"></script>
+<script>
+const cv=document.querySelector('canvas'),ctx=cv.getContext('2d');
+const left=createCharacter({character:'kitten',accessories:{hat:'cap'}}),right=createCharacter({character:'croissant',accessories:{hat:'beanie'}});
+function render(t){ctx.fillStyle='#fff9eb';ctx.fillRect(0,0,1000,850);ctx.fillStyle='#85324e';ctx.textAlign='center';ctx.font='26px Lilita';ctx.fillText('A picnic for two',500,45);
+for(const [ground,scale,label] of [[500,3,'3× enlarged — everything uses the same scale'],[795,1,'Actual desktop size · 1×']]){ctx.save();ctx.translate(500,ground);ctx.scale(scale,scale);drawPicnic(ctx,left,right,t);ctx.restore();ctx.font='16px Lilita';ctx.fillText(label,500,ground+(scale===3?85:45))}}
+let paused=false,time=.35,last=0;function frame(now){if(!paused)time+=Math.min((now-last)/1000,.05);last=now;render(time);requestAnimationFrame(frame)}document.fonts.ready.then(()=>requestAnimationFrame(frame));
+</script>

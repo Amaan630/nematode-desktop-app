@@ -133,10 +133,48 @@ response=await request(endpoint+'/register',{method:'POST',headers:auth(dressed)
 assert.equal(response.status,400);
 // The explicit additive migration preserves existing users, pending actions and acknowledgements.
 const legacy=new DatabaseSync(':memory:');
-legacy.exec("CREATE TABLE clients(id TEXT, character TEXT); CREATE TABLE actions(id TEXT,character TEXT,acknowledged INTEGER); INSERT INTO clients VALUES ('alice','nematode'); INSERT INTO actions VALUES ('pending','croissant',0);");
+legacy.exec("CREATE TABLE clients(id TEXT, character TEXT); CREATE TABLE actions(id TEXT,character TEXT,acknowledged INTEGER, pair TEXT, sequence INTEGER, action TEXT); INSERT INTO clients VALUES ('alice','nematode'); INSERT INTO actions(id,character,acknowledged) VALUES ('pending','croissant',0);");
 legacy.exec(readFileSync(new URL('../cloudflare/migrations/0002_appearance.sql',import.meta.url),'utf8'));
 assert.equal(legacy.prepare('SELECT character FROM clients').get().character,'nematode');
 assert.equal(legacy.prepare('SELECT acknowledged FROM actions').get().acknowledged,0);
-assert.equal(legacy.prepare('SELECT appearance FROM actions').get().appearance,null); legacy.close();
+assert.equal(legacy.prepare('SELECT appearance FROM actions').get().appearance,null);
+legacy.exec(readFileSync(new URL('../cloudflare/migrations/0003_scene.sql',import.meta.url),'utf8'));
+assert.equal(legacy.prepare('SELECT state FROM actions').get().state,null); legacy.close();
 console.log('Passed: auto-registration, first-other routing, inactive/restarted receiver, offline sender, lost-response dedupe, acknowledgements, latest shared state, explicit addressing and auth boundaries.');
+
+// Mode state is generic, durable, ordered with legacy Together/Separate, and idempotent.
+const picnic = {...event(alice,'scene'),payload:{character:alice.character(),state:{mode:'picnic',future:{layout:'cozy'}}}};
+await send(alice,picnic); await bob.cycle();
+assert.equal(bob.state.together.scene.mode,'picnic');
+assert.equal(bob.state.together.scene.future.layout,'cozy');
+const restoredMode = new CloudConnection(endpoint,options(stores[1],'croissant'));
+assert.equal(JSON.stringify(restoredMode.state.together.scene),JSON.stringify(bob.state.together.scene));
+const conflict=await request(endpoint+'/actions',{method:'POST',headers:auth(alice),body:JSON.stringify({...picnic,payload:{...picnic.payload,state:{mode:'future-mode'}}})});
+assert.equal(conflict.status,409);
+const future={...event(alice,'scene'),payload:{character:alice.character(),state:{mode:'future-mode',options:{one:1}}}};
+await send(alice,future); await bob.cycle();assert.equal(bob.state.together.scene.mode,'future-mode');
+await send(alice,event(alice,'separate'));await bob.cycle();assert.equal(bob.state.together.scene.mode,'solo');
+const hints=[];const hinted=new CloudConnection(endpoint,{...options(memory(),'kitten'),onUpdate:v=>hints.push(v)});
+hinted.offerUpdate('0.3.99');hinted.offerUpdate('0.3.99');hinted.offerUpdate('invalid');
+await new Promise(r=>setTimeout(r,0));assert.deepEqual(hints,['0.3.99']);
+const denied=await request(endpoint+'/release',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"version":"0.3.99"}'});
+assert.equal(denied.status,401);
+console.log('Passed: generic scene persistence, restart, future modes, action conflicts, legacy transitions and deduplicated update hints.');
+
+if (!process.env.BACKEND_TEST_URL) {
+  const originalFetch = globalThis.fetch, notifications = [];
+  env.RELEASE_TOKEN = 'test-release-secret';
+  env.LIVE.get = () => ({fetch: async (_url, init) => { notifications.push(JSON.parse(init.body)); return new Response(null,{status:204}); }});
+  globalThis.fetch = async () => Response.json({version:'0.3.99'});
+  try {
+    const publish = version => request(endpoint+'/release', {method:'POST',headers:{Authorization:'Bearer test-release-secret'},body:JSON.stringify({version})});
+    assert.equal((await publish('0.3.98')).status,409);
+    assert.equal(notifications.length,0);
+    assert.equal((await publish('0.3.99')).status,200);
+    assert.deepEqual(JSON.parse(notifications[0].message),{type:'update',version:'0.3.99'});
+    assert.equal(notifications[0].ids,null);
+    assert.equal((await (await request(endpoint+'/sync',{headers:auth(bob)})).json()).release,'0.3.99');
+    console.log('Passed: authenticated release publication, published-version validation, broadcast and reconnect catch-up.');
+  } finally { globalThis.fetch = originalFetch; }
+}
 sqlite.close();

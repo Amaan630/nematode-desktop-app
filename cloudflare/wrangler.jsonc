@@ -2,6 +2,7 @@
 {
   "name": "nematode-buddies-local",
   "main": "worker.mjs",
+  "vars": { "RELEASE_TOKEN": "local-release-test" },
   "compatibility_date": "2025-09-01",
   "durable_objects": { "bindings": [{ "name": "LIVE", "class_name": "LiveHub" }] },
   "migrations": [{ "tag": "live-v1", "new_sqlite_classes": ["LiveHub"] }],

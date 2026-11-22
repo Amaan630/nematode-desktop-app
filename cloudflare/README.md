@@ -106,3 +106,31 @@ actions save an immutable snapshot; live Together state returns the peer's curre
 still send/receive the top-level `character` field and simply omit accessories. Renderer changes belong in
 the app, not the server or gesture handlers. Tests cover snapshot preservation, live outfit changes,
 unknown future fields, appearance validation, action-ID conflicts, and the additive database migration.
+
+## Shared scenes and release hints
+
+Production applied `migrations/0003_scene.sql` on 2026-11-22 before the Terraform deployment.
+For another existing database, apply it once before deploying this Worker.
+It adds nullable action state, a singleton release record, and updates the relationship index; it preserves
+users and queued gestures. New databases bootstrap automatically.
+
+Send `{action:"scene", payload:{appearance, state:{mode:"picnic"}}}` through the usual addressed envelope.
+State is bounded JSON (2048 characters, depth 4), preserving future fields. `/sync` returns the latest
+`scene` inside the legacy `together` envelope; older apps see a picnic as Together. Unknown modes remain
+pending on newer clients until their renderer supports them. Heart/love receipt behavior is unchanged.
+
+For release hints, generate a random secret locally, keep it in ignored `cloudflare/.env` as
+`TF_VAR_release_token`, and set the same value as GitHub Actions secret `NEMATODE_RELEASE_TOKEN`.
+Source that file for every Terraform plan/apply so the binding stays configured. Terraform owns the
+`RELEASE_TOKEN` secret binding; it is never bundled into the app. Keep state/plan files private too.
+
+After GitHub publishes all release assets, CI posts `{version}` to `/release` with that bearer secret.
+The Worker checks the official GitHub `latest.json`, stores the version, and broadcasts an update hint.
+Reconnect sync includes the saved version for apps that were offline. Native code coalesces requests to
+at most once a minute and uses the existing signed updater; the socket never supplies a download URL.
+Launch/daily checks remain as fallback. Existing v0.3.12 apps need their normal update once to gain this path.
+
+`wrangler.jsonc` has an intentionally fake local hook secret. With a fresh local runtime, run
+`BACKEND_TEST_URL=http://localhost:8787 TEST_RELEASE_VERSION=0.3.12 node tests/live.mjs` to exercise real
+WebSocket release delivery and reconnect catch-up (use the currently published version). No real users
+are registered and no production notification is sent.

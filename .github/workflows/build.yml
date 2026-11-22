@@ -78,3 +78,17 @@ jobs:
           NOTES
           gh release create "$TAG" --repo "${{ github.repository }}" --title "Nematode $TAG" --notes-file notes.md \
             Nematode-Mac.dmg Nematode-Windows-Setup.exe Nematode-Mac-update.app.tar.gz latest.json
+
+      - name: Notify connected apps of the published release
+        env:
+          RELEASE_TOKEN: ${{ secrets.NEMATODE_RELEASE_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::warning::Release notification token is not configured; launch/daily update checks still work."
+            exit 0
+          fi
+          jq -n --arg version "${TAG#v}" '{version:$version}' > release-notification.json
+          curl --fail-with-body --retry 5 --retry-all-errors --retry-delay 10 \
+            -H "Authorization: Bearer $RELEASE_TOKEN" -H 'Content-Type: application/json' \
+            --data-binary @release-notification.json https://nematode-buddies.amaansyedali.workers.dev/release

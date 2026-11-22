@@ -130,3 +130,22 @@ A queued visit keeps the outfit worn when it was sent. Together applies current 
 keeping position and animation progress. Legacy messages without appearance render the original bare character.
 
 The blue baseball cap uses dark blue ink (`#173b78`) for every outline and seam, specified by its `ink` field in the hat registry.
+
+### Preview composition — no parallel design system
+
+Preview scenes must import the real character adapters, appearance instances, hats, fonts, and effects.
+Do not copy a character into the preview, scale individual characters to fit an illustration, or invent
+new heart sizes/timing. `heart.js::drawHeartEffect` owns the existing 26 px heart, spring, drift and fade;
+both the overlay and picnic preview call it. Enlarge the entire scene with one canvas transform and always
+show a 1× desktop-size view. Accessories remain attached by each character’s existing head transform.
+
+Sitting/cuddling belong to the character motion contract (`state: 'sit' | 'cuddle'`, `cuddle: 0..1`).
+Each character owns its seated geometry and `seated` dimensions. Scene composition uses those dimensions,
+not character-ID branches or separate drawings. `scripts/picnic.html` loads the real source files;
+`src/picnic.js` owns only the new blanket/basket and scene placement. The Picnic Mode fan action uses this same composition.
+
+The four-action fan grows to a 152 px radius while retaining the same font/icon sizes and spring.
+`Actors` supplies one remote character per installation to both persistent scenes and gesture delivery.
+When already together, the existing companion gives the gesture without another walk-in.
+Nematode sits with a tucked lower tail and an upright upper spine; its normal face, bands and hat remain
+owned by `drawNematode`. Reduced motion holds the cuddle pose still and omits ambient floating hearts.

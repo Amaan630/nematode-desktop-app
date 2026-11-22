@@ -53,6 +53,25 @@ try {
     Object.assign(n, {x: 450, y: 550, state: 'idle', t: 0, home: 450, nextWander: 100});
     want.mode = 'free'; want.floor = 550; step(.1);
     window.check = (condition, message) => { if (!condition) throw new Error(message); };
+    for (const character of Object.values(CHARACTERS)) for (const state of ['sit','cuddle']) {
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=300;
+      const paint=canvas.getContext('2d');
+      const shape=character.draw(paint,{x:150,ground:240,face:1,rot:0,accel:[0,0],dt:.016,now:1000,hat:'cap'},
+        {state,cuddle:1,phase:0,t:1,stretch:1,hop:0,crouch:0,impact:0,airborne:false});
+      check(shape instanceof Path2D, 'Seated characters preserve the hit-test contract');
+      check(paint.getImageData(0,0,300,300).data.some((v,i)=>i%4===3 && v), 'Seated character renders');
+    }
+    {
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=200;
+      const paint=canvas.getContext('2d');
+      const h={x:100,y:150,toX:null,colors:HEART_COLORS,t:.3,sway:0,dir:1};
+      drawHeartEffect(paint,h);
+      const pixels=paint.getImageData(0,0,200,200).data;let left=200,right=0;
+      for(let y=0;y<200;y++)for(let x=0;x<200;x++)if(pixels[(y*200+x)*4+3]){left=Math.min(left,x);right=Math.max(right,x)}
+      check(right-left>=24 && right-left<=30,'Shared heart keeps its desktop size');
+      paint.clearRect(0,0,200,200);drawHeartEffect(paint,{...h,t:1.8});
+      check(!paint.getImageData(0,0,200,200).data.some(v=>v),'Expired hearts disappear');
+    }
     for (const character of Object.values(CHARACTERS)) for (const hat of Object.keys(HATS)) {
       for (const face of [-1,1]) for (const rot of [0,.8]) {
         const canvas=document.createElement('canvas'); canvas.width=400; canvas.height=400;
@@ -74,10 +93,10 @@ try {
     window.openFan = () => cv.dispatchEvent(new MouseEvent('contextmenu', {clientX: n.x, clientY: n.y - 30, bubbles: true, cancelable: true}));
     window.pick = label => [...fan.element.querySelectorAll('[role=menuitem]')].find(b => b.getAttribute('aria-label') === label).dispatchEvent(new MouseEvent('click', {bubbles:true}));
     openFan(); check(fan.open, 'right-click opens fan');
-    check(fan.element.querySelectorAll('[role=menuitem]').length === 3, 'three actions');
+    check(fan.element.querySelectorAll('[role=menuitem]').length === 4, 'four actions');
     check(press === null, 'right-click must not grab');
     const stillX = n.x; step(1); check(n.x === stillX, 'menu pauses movement');
-    check(fan.element.offsetWidth === 256, 'compact fan');
+    check(fan.element.offsetWidth === 320, 'four-segment fan stays readable');
     check(!fan.element.querySelector('filter') && fan.element.querySelector('.segment').getAttribute('d').includes('C'), 'continuous hand-drawn outlines without displacement');
     check(document.fonts.check('14px "Lilita One"'), 'bundled font loaded');
     check(fan.element.querySelectorAll('animateTransform').length === 2, 'fan springs with vector transforms');
@@ -99,15 +118,15 @@ try {
   const mouse = (type, x, y, buttons = 0) => call('Input.dispatchMouseEvent', {
     type, x:fanBounds.x + x, y:fanBounds.y + y, button:type === 'mouseMoved' && !buttons ? 'none' : 'left', buttons, clickCount:1,
   });
-  await mouse('mousePressed', 53, 92, 1);
-  await mouse('mouseMoved', 128, 49, 1);
+  await mouse('mousePressed', 50, 123, 1);
+  await mouse('mouseMoved', 114, 58, 1);
   await run(`check(fan.element.querySelector('.active')?.getAttribute('aria-label') === 'Send I love you', 'drag transfers active segment');`);
   await call('Page.captureScreenshot', {format:'png'}).then(r => writeFile('/private/tmp/nematode-fan-drag.png', Buffer.from(r.data, 'base64')));
-  await mouse('mouseReleased', 128, 49);
+  await mouse('mouseReleased', 114, 58);
   await run(`check(chosen.length === 1 && chosen[0] === 'love', 'release chooses only the destination'); openFan(); fan.element.querySelector('svg').setCurrentTime(1);`);
-  await mouse('mousePressed', 53, 92, 1);
-  await mouse('mouseMoved', 280, 140, 1);
-  await mouse('mouseReleased', 280, 140);
+  await mouse('mousePressed', 50, 123, 1);
+  await mouse('mouseMoved', 350, 160, 1);
+  await mouse('mouseReleased', 350, 160);
   await run(`check(chosen.length === 1 && fan.open, 'release outside cancels selection'); fan.choose = savedChoose;`);
   await run(`
     pick('Send a heart'); check(!fan.open && hearts.length === 1 && hearts[0].colors === GOLD_HEART_COLORS, 'gold send action');
@@ -148,7 +167,7 @@ try {
     check(delivery.active, 'incoming heart queues a visit');
     for (let i = 0; i < 1200 && delivery.guest?.state !== 'give'; i++) step(1/60);
     check(delivery.guest?.state === 'give', 'sender arrives');
-    check(delivery.guest.character.appearance.character === 'nematode' && character().appearance.character === 'croissant', 'sender character is preserved');
+    check(delivery.guest.actor.character.appearance.character === 'nematode' && character().appearance.character === 'croissant', 'sender character is preserved');
     check(hearts.length === 1 && hearts[0].colors === GOLD_HEART_COLORS, 'visitor gives one gold heart');
     step(.45);
   `);
@@ -168,7 +187,7 @@ try {
     buddy.receive({id:'love-preview', from:'alice', to:buddy.id, action:'love', payload:{character:'nematode'}});
     for (let i=0; i<1800 && !words.length; i++) step(1/60);
     check(words.length === 1 && words[0].text === 'I love you', 'received love plays its bubble');
-    check(delivery.guest.character.appearance.character === 'nematode', 'love uses sender character');
+    check(delivery.guest.actor.character.appearance.character === 'nematode', 'love uses sender character');
     step(30); check(!delivery.active && n.state === 'gone', 'love visitor and temporary resident leave');
     nema({mode:'free', floor:550});
     buddy.receive({id:'together-preview', from:'alice', to:buddy.id, action:'together', payload:{character:'croissant'}});
@@ -212,12 +231,12 @@ try {
     check(fan.element.querySelectorAll('animateTransform').length === 0, 'reduced motion skips spring'); fan.hide();
   `);
   await run(`
-    delivery.guest=null; delivery.queue.length=0; together.guest=null; together.active=false;
+    delivery.guest=null; delivery.queue.length=0; actors.byId.clear(); together.guest=null; together.active=false;
     const look={character:'croissant',accessories:{hat:'cap'},future:{color:'blue'}};
     for(const action of ['heart','love']) {
       check(receiveGesture({action,payload:{character:look.character,appearance:look}}), 'dressed visitor accepted');
-      step(.02); check(delivery.guest.character.appearance.accessories.hat==='cap', 'gesture carries the hat');
-      delivery.guest=null; delivery.queue.length=0;
+      step(.02); check(delivery.guest.actor.character.appearance.accessories.hat==='cap', 'gesture carries the hat');
+      delivery.guest=null; delivery.queue.length=0; actors.byId.clear();
     }
     together.join(createCharacter(look)); together.guest.x=321; together.guest.t=8;
     together.join(createCharacter({...look,accessories:{hat:'sunhat'}}));
@@ -228,6 +247,51 @@ try {
     check(captured[0].payload.appearance.accessories.hat==='cap' && captured[0].payload.appearance.future.color==='blue',
       'every action automatically captures the complete appearance');
     together.guest=null; together.active=false;
+  `);
+  await run(`
+    actors.byId.clear();delivery.guest=null;delivery.queue.length=0;together.guest=null;together.active=false;
+    setCharacter('kitten');setHat('cap');
+    Object.assign(n,{x:450,y:550,state:'idle',home:450,nextWander:100});want.mode='free';
+    const peer={id:'partner',appearance:{character:'croissant',accessories:{hat:'beanie'}}};
+    for(const mode of ['together','picnic']) {
+      selectScene({mode,future:{setting:'retained'}},peer);step(4);
+      check(together.guest.ready && together.guest.visible,'Shared actor is on screen');
+      const actor=together.guest;
+      for(const action of ['heart','love']) {
+        let completed=0;
+        receiveGesture({from:peer.id,action,payload:{character:'croissant',appearance:peer.appearance}},()=>completed++);
+        step(.05);
+        check(delivery.guest.actor===actor && actors.byId.size===1,'Gesture uses the existing actor in '+mode);
+        check(delivery.guest.state==='give','Existing actor gives immediately without walking in');
+        step(4);check(completed===1 && together.guest===actor,'One receipt, persistent actor remains');
+      }
+      const saved=localStorage.getItem('nematode-session');
+      together.guest=null;together.active=false;actors.byId.clear();restoreScene();step(4);
+      check(together.mode===mode && session.future.setting==='retained','Opaque mode state restores across restart');
+      check(localStorage.getItem('nematode-session')===saved,'Restoration preserves future state fields');
+    }
+    openFan();check(fan.element.textContent.includes('Endpicnic'),'End picnic replaces picnic');fan.hide();
+  `);
+  await call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile('/private/tmp/nematode-picnic-mode.png',Buffer.from(r.data,'base64')));
+  await run(`
+    // Separating during an arrival must not acknowledge a gesture that never played.
+    const registry=new Actors(), scene=new Together(registry);let given=0,receipts=0;
+    const visit=new Delivery(()=>given++,registry), sender=createCharacter({character:'nematode'});
+    scene.join(sender,'pending-peer');visit.enqueue(sender,'heart',()=>receipts++,'pending-peer');
+    const at={x:450,ground:550,dt:1/60,now:0,settled:true};
+    scene.draw(ctx,at,character(),true);visit.draw(ctx,at,character());scene.separate();
+    for(let i=0;i<1200;i++){scene.draw(ctx,at,character(),true);visit.draw(ctx,at,character());}
+    check(given===1 && receipts===1 && registry.byId.size===0,'Separating during arrival still delivers exactly once');
+    visit.enqueue(sender,'love',()=>{},'adopted-peer');visit.draw(ctx,at,character());
+    const arriving=visit.guest.actor;scene.join(sender,'adopted-peer');
+    check(scene.guest===arriving && registry.byId.size===1,'Joining adopts an existing delivery actor');
+    for(const left of Object.keys(CHARACTERS))for(const right of Object.keys(CHARACTERS))
+      for(const a of Object.keys(HATS))for(const b of Object.keys(HATS)) {
+        const paint=document.createElement('canvas').getContext('2d');paint.canvas.width=paint.canvas.height=400;paint.translate(200,260);
+        const result=drawPicnic(paint,createCharacter({character:left,accessories:{hat:a}}),createCharacter({character:right,accessories:{hat:b}}),.4);
+        check(result.hit instanceof Path2D && Number.isFinite(result.rightX),'Every pairing/hat composition renders');
+      }
+    selectScene({mode:'solo'});step(10);
   `);
   assert.equal(await run(`(async () => {
     const sent = [], client = new BuddyClient('alice', {send: async e => sent.push(e)});

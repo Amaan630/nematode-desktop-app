@@ -60,22 +60,24 @@ class ActionFan {
     this.endPress();
     clearTimeout(this.closeTimer);
     this.element.inert = false;
-    const actions = this.actions(), below = top < 148, cy = below ? 12 : 136;
-    this.element.style.left = `${Math.max(16, Math.min(innerWidth - 272, x - 128))}px`;
-    this.element.style.top = `${Math.max(16, Math.min(innerHeight - 164, below ? bottom : top - 136))}px`;
+    const actions = this.actions(), radius = Math.max(120, actions.length * 38), cx = radius + 8, height = radius + 28;
+    const below = top < height, cy = below ? 12 : radius + 16;
+    this.element.style.width = `${cx*2}px`; this.element.style.height = `${height}px`;
+    this.element.style.left = `${Math.max(16, Math.min(innerWidth - cx*2 - 16, x - cx))}px`;
+    this.element.style.top = `${Math.max(16, Math.min(innerHeight - height - 16, below ? bottom : top - cy))}px`;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 256 148');
+    svg.setAttribute('viewBox', `0 0 ${cx*2} ${height}`);
     svg.setAttribute('role', 'menu'); svg.setAttribute('aria-label', 'Together');
     // Animate vector transforms, not a CSS-scaled bitmap of the SVG (which blurs in WebKit).
     const spring = document.createElementNS(svg.namespaceURI, 'g');
-    spring.setAttribute('transform', `translate(128 ${cy})`);
+    spring.setAttribute('transform', `translate(${cx} ${cy})`);
     const animate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
     spring.innerHTML = `<g>${animate ? `<animateTransform attributeName="transform" type="scale"
       values=".18 .1;1.08 1.12;.98 .96;1 1" keyTimes="0;.46;.72;1" calcMode="spline" keySplines=".2 0 .3 1;.4 0 .6 1;.4 0 .6 1" dur=".28s" fill="freeze"/>
       <animate attributeName="opacity" values="0;1" dur=".12s" fill="freeze"/>` : ''}
       <g>${animate ? `<animateTransform attributeName="transform" type="rotate"
         values="-6;1;-.5;0" keyTimes="0;.46;.72;1" calcMode="spline" keySplines=".2 0 .3 1;.4 0 .6 1;.4 0 .6 1" dur=".28s" fill="freeze"/>` : ''}
-        <g class="art" transform="translate(-128 ${-cy})"></g>
+        <g class="art" transform="translate(${-cx} ${-cy})"></g>
       </g></g>`;
     const art = spring.querySelector('.art');
     svg.append(spring);
@@ -85,7 +87,7 @@ class ActionFan {
       // Smooth pen wobble in the geometry itself, so the stroke never breaks into filter pixels.
       const point = (r, t) => {
         r += 1.1 * Math.sin(5 * t) + .6 * Math.sin(9 * t);
-        return [128 + r * Math.cos(t), cy + r * Math.sin(t)];
+        return [cx + r * Math.cos(t), cy + r * Math.sin(t)];
       };
       const arc = (r, from, to) => {
         let path = '';
@@ -103,10 +105,10 @@ class ActionFan {
       };
       const item = document.createElementNS(svg.namespaceURI, 'g');
       item.setAttribute('role', 'menuitem'); item.setAttribute('tabindex', '0'); item.setAttribute('aria-label', a.label);
-      const ix = 128 + 87 * Math.cos(mid), iy = cy + 87 * Math.sin(mid);
-      item.innerHTML = `<path class="segment" d="M${point(120, start)}${arc(120, start, end)}
-        Q${point(82, end + .012)} ${point(45, end)}${arc(45, end, start)}
-        Q${point(82, start + .012)} ${point(120, start)} Z"/>
+      const ix = cx + (radius - 33) * Math.cos(mid), iy = cy + (radius - 33) * Math.sin(mid);
+      item.innerHTML = `<path class="segment" d="M${point(radius, start)}${arc(radius, start, end)}
+        Q${point(radius - 38, end + .012)} ${point(radius - 75, end)}${arc(radius - 75, end, start)}
+        Q${point(radius - 38, start + .012)} ${point(radius, start)} Z"/>
         <g class="symbol" transform="translate(${ix - 12},${iy - 24})">${a.icon}</g>`;
       const label = document.createElementNS(svg.namespaceURI, 'text');
       label.setAttribute('x', ix); label.setAttribute('y', iy + 13);

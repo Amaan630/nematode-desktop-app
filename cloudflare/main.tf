@@ -19,6 +19,12 @@ variable "workers_subdomain" {
   type        = string
   description = "The account's existing workers.dev subdomain (without .workers.dev)."
 }
+variable "release_token" {
+  type      = string
+  sensitive = true
+  default   = null
+}
+
 variable "name" {
   type    = string
   default = "nematode-buddies"
@@ -45,7 +51,7 @@ resource "cloudflare_workers_script" "buddies" {
   content_sha256     = filesha256("${path.module}/worker.mjs")
   compatibility_date = "2025-09-01"
   migrations         = var.initialize_live_hub ? { new_tag = "live-v1", new_sqlite_classes = ["LiveHub"] } : null
-  bindings = [{
+  bindings = concat([{
     name = "DB"
     type = "d1"
     id   = cloudflare_d1_database.buddies.id
@@ -53,7 +59,7 @@ resource "cloudflare_workers_script" "buddies" {
     name       = "LIVE"
     type       = "durable_object_namespace"
     class_name = "LiveHub"
-  }]
+  }], var.release_token == null ? [] : [{ name = "RELEASE_TOKEN", type = "secret_text", text = var.release_token }])
 }
 
 resource "cloudflare_workers_script_subdomain" "buddies" {

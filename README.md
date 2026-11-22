@@ -114,10 +114,13 @@ menu to see a different character walk in, give a gold heart, and leave. This te
 
 ## Release
 
+**Accepted baseline: [v0.3.12](https://github.com/Amaan630/nematode-desktop-app/releases/tag/v0.3.12).**
+Confirmed successful in real use on November 22, 2026. Preserve this release’s behavior when extending the app.
+
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit, then tag it:
 
 ```bash
-git tag v0.3.12 && git push --tags
+git tag v0.3.13 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.
@@ -134,3 +137,11 @@ The backend is deployed; this checkout includes its public endpoint. Release 0.3
 Run `npm run desktop-dev` on your Mac. It temporarily runs a development copy on your actual desktop; saving UI files reloads it immediately. Ctrl+C or Quit restores your installed app. [Instructions and behavior](docs/desktop-development.md).
 
 The Hat menu offers a pink beret, blue baseball cap, cream beanie, and ribbon sun hat for either character. Shared appearances include hats; visiting gestures retain the sent outfit and Together follows live outfit changes.
+
+## Picnic Mode
+
+The four-part fan adds Picnic Mode. All three characters can sit together, wearing their chosen hats.
+End picnic returns to walking together; Separate sends the companion home. Hearts and love use the
+companion already on screen. Shared modes are saved as one extensible state object and restored after updates.
+Releases can notify running apps over their existing WebSocket; signed GitHub updates remain the source.
+Release 0.3.13 introduces Picnic Mode and live release notifications.

@@ -23,3 +23,17 @@ function drawHeart(ctx, x, y, size, rot = 0, C = HEART_COLORS) {
   ctx.lineWidth = .065; ctx.strokeStyle = C.glint; ctx.stroke();
   ctx.restore();
 }
+
+// Shared click/gesture animation: size, spring, travel and fade are identical in previews.
+function drawHeartEffect(ctx, h) {
+  if (h.t < 0 || h.t >= 1.8) return;
+  const u = Math.min(1, h.t / .8);
+  ctx.save();
+  const pop = h.t < .25 ? 1 + .25 * Math.sin(Math.PI * h.t / .25) : 1; // overshoots, then settles
+  const grow = Math.min(1, h.t / .12), rise = 70 * h.t + 25 * h.t * h.t;
+  ctx.globalAlpha = Math.min(1, (1.8 - h.t) / .5);
+  const x = h.toX === null ? h.x : h.x + (h.toX - h.x) * (u * u * (3 - 2 * u));
+  drawHeart(ctx, x + h.dir * 12 * Math.sin(2.6 * h.t + h.sway) - h.dir * 12 * Math.sin(h.sway), h.y - rise,
+            26 * grow * pop, .18 * Math.sin(2.6 * h.t + h.sway + 1), h.colors);
+  ctx.restore();
+}

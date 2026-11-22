@@ -13,7 +13,7 @@ const CROISSANT_INK = {
 function drawCroissant(ctx, p) {
   const canvasTransform = ctx.getTransform();
   const C = CROISSANT_INK, S = p.scale, f = p.face ?? 1, walk = p.walk ?? 0, ph = p.phase ?? 0, sq = p.squash ?? 0;
-  const [jl, jr] = p.jiggle ?? [0, 0], OUT = .024, LEG = .17, wave = Math.sin(2 * Math.PI * ph);
+  const [jl, jr] = p.jiggle ?? [0, 0], OUT = .024, LEG = p.seated ? .055 : .17, wave = Math.sin(2 * Math.PI * ph);
   const lift = [Math.max(0, wave), Math.max(0, -wave)].map(v => .07 * walk * v); // left, right boot
   const rock = .08 * walk * wave, hipY = -LEG - .025 * walk * Math.abs(wave);
 
@@ -34,7 +34,13 @@ function drawCroissant(ctx, p) {
   ctx.lineJoin = ctx.lineCap = 'round';
 
   // --- Legs: short and stubby, each boot lifts and steps forward in turn ---
-  [-1, 1].forEach((side, i) => {
+  if (p.seated) {
+    for (const side of [-1,1]) {
+      const foot = new Path2D(); foot.ellipse(side*.19, -.01, .12, .052, side*.25, 0, 7);
+      ctx.lineWidth=OUT;ctx.strokeStyle=C.outline;ctx.stroke(foot);
+      cel(foot,C.leg,C.legShade,-.02,-.01);
+    }
+  } else [-1, 1].forEach((side, i) => {
     const up = lift[i], fwd = .4 * up, hx = side * .085 + fwd / 2;
     const leg = new Path2D(); leg.roundRect(hx - .05, hipY - .04, .1, LEG - up + .02, .05);
     const boot = new Path2D(); boot.ellipse(hx + fwd / 2 + .02, -up - .045, .08, .048, 0, 0, 7);
@@ -115,7 +121,7 @@ class CroissantJiggle {
 
 // As an overlay character (see src/overlay.js for the contract).
 if (typeof CHARACTERS !== 'undefined') CHARACTERS.croissant = {
-  name: 'Croissant', width: 100, height: 58, dust: '#d9964d', // golden crumbs
+  name: 'Croissant', width: 100, height: 58, seated: {width:100,height:58}, dust: '#d9964d', // golden crumbs
   gait: { hz: 2.2, pace: () => .75 },                          // steady waddle
   jiggle: new CroissantJiggle(),
   create() { return { ...this, jiggle: new CroissantJiggle() }; }, // each visitor gets its own springs
@@ -123,8 +129,9 @@ if (typeof CHARACTERS !== 'undefined') CHARACTERS.croissant = {
     return drawCroissant(ctx, {
       x: at.x, ground: at.ground - m.hop, hat: at.appearance?.accessories?.hat || at.hat, scale: 70 * (at.zoom ?? 1), face: at.face, rot: at.rot,
       walk: m.state === 'walk' ? 1 : 0, phase: m.phase,
-      squash: 1 - m.stretch, blink: (at.now / 1000) % 3.7 < .12 ? 1 : 0,
-      jiggle: this.jiggle.step(at.dt, at.accel[0] * at.face, at.accel[1], 70),
+      seated: ['sit','cuddle'].includes(m.state),
+      squash: 1 - m.stretch, blink: m.state === 'cuddle' && m.cuddle > .4 ? 1 : (at.now / 1000) % 3.7 < .12 ? 1 : 0,
+      jiggle: ['sit','cuddle'].includes(m.state) ? [-.28,-.12] : this.jiggle.step(at.dt, at.accel[0] * at.face, at.accel[1], 70),
     });
   },
 };

@@ -12,10 +12,10 @@ export class LiveHub {
       server.send('sync'); // catches anything stored before the connection was established
       return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': 'nematode' } });
     }
-    const ids = await request.json();
+    const { ids, message = 'sync' } = await request.json();
     const sockets = ids ? ids.flatMap(id => this.ctx.getWebSockets(id)) : this.ctx.getWebSockets();
     for (const socket of new Set(sockets)) {
-      try { socket.send('sync'); } catch { socket.close(); }
+      try { socket.send(message); } catch { socket.close(); }
     }
     return new Response(null, { status: 204 });
   }
@@ -25,8 +25,8 @@ export class LiveHub {
   webSocketError(socket) { socket.close(); }
 }
 const hub = env => env.LIVE.get(env.LIVE.idFromName('buddies'));
-async function notify(env, ids = null) {
-  const response = await hub(env).fetch('https://live/notify', { method: 'POST', body: JSON.stringify(ids) });
+async function notify(env, ids = null, message = 'sync') {
+  const response = await hub(env).fetch('https://live/notify', { method: 'POST', body: JSON.stringify({ids, message}) });
   if (!response.ok) throw new Error('Live notification failed');
 }
 
@@ -43,15 +43,22 @@ const schema = [
     secret_hash TEXT NOT NULL, character TEXT NOT NULL, appearance TEXT)`,
   `CREATE TABLE IF NOT EXISTS actions (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL,
     sender TEXT NOT NULL REFERENCES clients(id), recipient TEXT NOT NULL REFERENCES clients(id),
-    pair TEXT NOT NULL, action TEXT NOT NULL, character TEXT NOT NULL, appearance TEXT, acknowledged INTEGER NOT NULL DEFAULT 0)`,
+    pair TEXT NOT NULL, action TEXT NOT NULL, character TEXT NOT NULL, appearance TEXT, state TEXT, acknowledged INTEGER NOT NULL DEFAULT 0)`,
+  'CREATE TABLE IF NOT EXISTS releases (id INTEGER PRIMARY KEY CHECK (id = 1), version TEXT NOT NULL)',
   'CREATE INDEX IF NOT EXISTS inbox ON actions(recipient, acknowledged, sequence)',
-  "CREATE INDEX IF NOT EXISTS relationship ON actions(pair, sequence DESC) WHERE action IN ('together','separate')",
+  "CREATE INDEX IF NOT EXISTS relationship ON actions(pair, sequence DESC) WHERE action IN ('together','separate','scene')",
 ];
 const initialized = new WeakMap();
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
 const character = value => typeof value === 'string' && /^[a-z0-9_-]{1,40}$/.test(value);
 const pairKey = (a, b) => [a, b].sort().join(':');
-const supported = new Set(['heart', 'love', 'together', 'separate']);
+const supported = new Set(['heart', 'love', 'together', 'separate', 'scene']);
+function sceneState(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !character(value.mode)) fail(400, 'Invalid scene');
+  const encoded = JSON.stringify(canonical(value));
+  if (encoded.length > 2048) fail(400, 'Scene too large');
+  return encoded;
+}
 const headers = { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' };
 const json = (body, status = 200) => Response.json(body, { status, headers });
 function fail(status, message) { throw Object.assign(new Error(message), { status }); }
@@ -96,6 +103,11 @@ async function hash(secret) {
   return [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+async function ensureSchema(db) {
+  if (!initialized.has(db)) initialized.set(db, db.batch(schema.map(sql => db.prepare(sql))).catch(e => { initialized.delete(db); throw e; }));
+  await initialized.get(db);
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: { ...headers,
@@ -104,6 +116,17 @@ export default {
       const url = new URL(request.url), db = env.DB;
       if (request.method === 'GET' && url.pathname === '/health') return json({ ok: true });
       if (Number(request.headers.get('content-length')) > 8192) fail(413, 'Request too large');
+      if (request.method === 'POST' && url.pathname === '/release') {
+        if (!env.RELEASE_TOKEN || request.headers.get('authorization') !== `Bearer ${env.RELEASE_TOKEN}`) fail(401, 'Unauthorized');
+        const { version } = await body(request);
+        if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version)) fail(400, 'Invalid version');
+        const published = await fetch('https://github.com/Amaan630/nematode-desktop-app/releases/latest/download/latest.json');
+        if (!published.ok || (await published.json()).version !== version) fail(409, 'Release not published');
+        await ensureSchema(db);
+        await db.prepare('INSERT INTO releases(id, version) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET version=excluded.version').bind(version).run();
+        await notify(env, null, JSON.stringify({type:'update', version}));
+        return json({ok:true});
+      }
       const live = url.pathname === '/live' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket';
       const protocols = request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(s => s.trim()) || [];
       const device = live && protocols.includes('nematode') && protocols.find(p => p.startsWith('device.'));
@@ -111,10 +134,7 @@ export default {
       const auth = credential?.match(/^Bearer ([^:]+):([0-9a-f]{64})$/);
       if (!auth || !uuid(auth[1])) fail(401, 'Invalid device credential');
       const [, id, secret] = auth, secretHash = await hash(secret);
-      if (!initialized.has(db)) {
-        initialized.set(db, db.batch(schema.map(sql => db.prepare(sql))).catch(e => { initialized.delete(db); throw e; }));
-      }
-      await initialized.get(db);
+      await ensureSchema(db);
       if (request.method === 'POST' && url.pathname === '/register') {
         const data = await body(request);
         const look = appearance(data), characterId = JSON.parse(look).character;
@@ -133,21 +153,22 @@ export default {
       if (request.method === 'POST' && url.pathname === '/actions') {
         const data = await body(request);
         const look = appearance(data.payload), characterId = JSON.parse(look).character;
+        const state = data.action === 'scene' ? sceneState(data.payload?.state) : null;
         if (!uuid(data.id) || !supported.has(data.action)
             || (data.to != null && !uuid(data.to))) fail(400, 'Invalid action');
         const existing = await db.prepare('SELECT * FROM actions WHERE id = ?').bind(data.id).first();
         if (existing) {
-          if (existing.sender !== id || existing.action !== data.action || !sameAppearance(existing, look)
+          if (existing.sender !== id || existing.action !== data.action || !sameAppearance(existing, look) || (existing.state || null) !== state
               || (data.to != null && existing.recipient !== data.to)) fail(409, 'Action ID already used');
           await notify(env, [id, existing.recipient]);
           return json({ id: data.id, to: existing.recipient });
         }
         const peer = await resolveRecipient(db, id, data.to);
         if (!peer) fail(409, 'No recipient yet');
-        await db.prepare('INSERT INTO actions(id, sender, recipient, pair, action, character, appearance) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING')
-          .bind(data.id, id, peer.id, pairKey(id, peer.id), data.action, characterId, look).run();
-        const stored = await db.prepare('SELECT sender, recipient, action, character, appearance FROM actions WHERE id = ?').bind(data.id).first();
-        if (stored.sender !== id || stored.action !== data.action || !sameAppearance(stored, look)
+        await db.prepare('INSERT INTO actions(id, sender, recipient, pair, action, character, appearance, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING')
+          .bind(data.id, id, peer.id, pairKey(id, peer.id), data.action, characterId, look, state).run();
+        const stored = await db.prepare('SELECT sender, recipient, action, character, appearance, state FROM actions WHERE id = ?').bind(data.id).first();
+        if (stored.sender !== id || stored.action !== data.action || !sameAppearance(stored, look) || (stored.state || null) !== state
             || stored.recipient !== peer.id) fail(409, 'Action ID already used');
         await notify(env, [id, peer.id]);
         return json({ id: data.id, to: peer.id });
@@ -156,10 +177,12 @@ export default {
         const peer = await resolveRecipient(db, id);
         const events = await db.prepare("SELECT id, sender AS 'from', recipient AS 'to', action, character, appearance FROM actions WHERE recipient = ? AND acknowledged = 0 AND action IN ('heart','love') ORDER BY sequence LIMIT 50")
           .bind(id).all();
-        const state = peer && await db.prepare("SELECT sequence, action FROM actions WHERE pair = ? AND action IN ('together','separate') ORDER BY sequence DESC LIMIT 1")
+        const state = peer && await db.prepare("SELECT sequence, action, state FROM actions WHERE pair = ? AND action IN ('together','separate','scene') ORDER BY sequence DESC LIMIT 1")
           .bind(pairKey(id, peer.id)).first();
-        return json({ peer, events: events.results.map(({ character, appearance, ...event }) => ({ ...event, payload: { character, appearance: savedAppearance({ character, appearance }) } })),
-          together: { version: state?.sequence || 0, active: state?.action === 'together', peer } });
+        const scene = state?.state ? JSON.parse(state.state) : {mode:state?.action === 'together' ? 'together' : 'solo'};
+        const release = await db.prepare('SELECT version FROM releases WHERE id = 1').first();
+        return json({ peer, release: release?.version || null, events: events.results.map(({ character, appearance, ...event }) => ({ ...event, payload: { character, appearance: savedAppearance({ character, appearance }) } })),
+          together: { version: state?.sequence || 0, active: scene.mode !== 'solo', scene, peer } });
       }
       if (request.method === 'POST' && url.pathname === '/ack') {
         const data = await body(request);

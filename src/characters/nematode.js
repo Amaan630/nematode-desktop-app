@@ -17,7 +17,9 @@ function drawNematode(ctx, p) {
   let x = 0, y = 0;
   for (let i = 0; i <= N; i++) {
     const s = i / N;
-    const th = 0.58 + 1.42 * nemaEase(0, .8, s) * curl + wave * Math.sin(2 * Math.PI * (1.2 * s - ph));
+    const th = p.seated
+      ? .12 + 1.55 * nemaEase(0, .45, s)
+      : 0.58 + 1.42 * nemaEase(0, .8, s) * curl + wave * Math.sin(2 * Math.PI * (1.2 * s - ph));
     const t = [Math.cos(th), Math.sin(th)];
     if (i) { x += t[0] * st / N; y += t[1] * st / N; }
     pts.push([x, y]); T.push(t);
@@ -109,13 +111,14 @@ function drawNematode(ctx, p) {
 
 // As an overlay character (see src/overlay.js for the contract).
 if (typeof CHARACTERS !== 'undefined') CHARACTERS.nematode = {
-  name: 'Nematode', width: 40, height: 64, dust: '#b9a35e',
+  name: 'Nematode', width: 40, height: 64, seated: {width:46,height:58}, dust: '#b9a35e',
   // Inchworm gait: each ripple up the body surges him forward.
   gait: { hz: 3.2, pace: phase => .45 + .85 * Math.max(0, Math.sin(2 * Math.PI * phase)) },
   draw(ctx, at, m) {
     const p = { x: at.x, ground: at.ground - m.hop, scale: 64 * (at.zoom ?? 1), face: at.face, rot: at.rot, stretch: m.stretch, hat: at.appearance?.accessories?.hat || at.hat };
     const surge = Math.sin(2 * Math.PI * m.phase);
-    if (m.state === 'walk') Object.assign(p, { phase: m.phase, wave: .16, curl: 1 - .12 * surge,
+    if (['sit','cuddle'].includes(m.state)) Object.assign(p, { seated: true, stretch: .9, mouth: .65 });
+    else if (m.state === 'walk') Object.assign(p, { phase: m.phase, wave: .16, curl: 1 - .12 * surge,
       stretch: 1 + .06 * surge, hop: 3 * Math.max(0, surge), ground: at.ground, mouth: .8 + .2 * surge });
     else if (m.state === 'held') Object.assign(p, { phase: m.phase, wave: .3, curl: 1.15, mouth: 1.2 }); // wriggling
     else if (m.state === 'idle') { const b = Math.sin(m.t * 3); Object.assign(p, { curl: 1 + .05 * b, stretch: 1 + .02 * b }); }

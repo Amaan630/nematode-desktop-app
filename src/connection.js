@@ -1,9 +1,9 @@
 // Durable local queues plus WebSocket wake-ups and HTTP delivery. Registration is automatic; nobody enters a code.
 class CloudConnection {
-  constructor(url, { storage = localStorage, fetch = globalThis.fetch.bind(globalThis), character, appearance = () => ({character:character(), accessories:{}}), isActive, canPlay = () => true, onGesture, onState, WebSocket = globalThis.WebSocket }) {
+  constructor(url, { storage = localStorage, fetch = globalThis.fetch.bind(globalThis), character, appearance = () => ({character:character(), accessories:{}}), isActive, canPlay = () => true, onGesture, onState, onUpdate = () => {}, WebSocket = globalThis.WebSocket }) {
     this.WebSocket = WebSocket; this.stopped = true; this.needsSync = true; this.retryAt = 0; this.delay = 1000;
     this.url = url.replace(/\/$/, ''); this.storage = storage; this.fetch = fetch;
-    this.character = character; this.appearance = appearance; this.isActive = isActive; this.canPlay = canPlay; this.onGesture = onGesture; this.onState = onState;
+    this.character = character; this.appearance = appearance; this.isActive = isActive; this.canPlay = canPlay; this.onGesture = onGesture; this.onState = onState; this.onUpdate = onUpdate; this.updateVersion = null;
     this.key = `nematode-cloud:${this.url}`;
     const saved = storage.getItem(this.key);
     if (saved) {
@@ -41,7 +41,7 @@ class CloudConnection {
 
   applyState(active) {
     const state = this.state.together;
-    if (!active || !this.canPlay() || !state || this.state.outbox.some(e => e.action === 'together' || e.action === 'separate')) return;
+    if (!active || !this.canPlay() || !state || this.state.outbox.some(e => e.action === 'together' || e.action === 'separate' || e.action === 'scene')) return;
     const signature = JSON.stringify(state);
     if (signature !== this.applied && this.onState(state) !== false) this.applied = signature;
   }
@@ -85,6 +85,7 @@ class CloudConnection {
       }
       const sync = await this.request('/sync');
       this.peer = sync.peer;
+      if (sync.release) this.offerUpdate(sync.release);
       const known = new Set([...this.state.inbox.map(e => e.id), ...this.state.receipts]);
       const events = sync.events.filter(e => e.to === this.state.id && !known.has(e.id));
       this.save({ ...this.state, inbox: [...this.state.inbox, ...events], together: sync.together });
@@ -114,6 +115,9 @@ class CloudConnection {
     socket.onmessage = ({ data }) => {
       if (this.socket !== socket) return;
       if (data === 'pong') this.lastPong = Date.now();
+      if (data.startsWith('{')) {
+        try { const message = JSON.parse(data); if (message.type === 'update') this.offerUpdate(message.version); } catch {}
+      }
       if (data === 'sync') {
         this.needsSync = true;
         void this.cycle().catch(() => {});
@@ -121,6 +125,12 @@ class CloudConnection {
     };
     socket.onclose = disconnected;
     socket.onerror = () => { disconnected(); socket.close(); };
+  }
+
+  offerUpdate(version) {
+    if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version) || version === this.updateVersion) return;
+    this.updateVersion = version;
+    Promise.resolve().then(() => this.onUpdate(version)).catch(() => { this.updateVersion = null; });
   }
 
   async tick() {

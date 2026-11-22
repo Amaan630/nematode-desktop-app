@@ -31,6 +31,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             activity::user_active,
+            update::request_update,
             presence::summon_for_together,
             presence::overlay_ready,
             grab::cursor,

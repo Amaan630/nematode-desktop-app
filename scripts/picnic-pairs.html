@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>Picnic composition preview</title>
+<style>@font-face{font-family:Lilita;src:url('../src/fonts/LilitaOne-Regular.ttf')}body{margin:0;background:#fff9eb;color:#85324e}canvas{display:block}button{font:16px Lilita;background:#fff9eb;border:1px solid #c57a88;border-radius:8px;padding:8px;position:fixed;right:12px;bottom:12px}</style>
+<canvas width="1000" height="850"></canvas>
+<script>const CHARACTERS={};</script><script src="../src/hats.js"></script>
+<script src="../src/characters/nematode.js"></script><script src="../src/characters/croissant.js"></script><script src="../src/characters/kitten.js"></script>
+<script src="../src/appearance.js"></script><script src="../src/heart.js"></script><script src="../src/picnic.js"></script>
+<script>
+const cv=document.querySelector('canvas'),ctx=cv.getContext('2d');cv.width=1080;cv.height=900;
+function render(){ctx.fillStyle='#fff9eb';ctx.fillRect(0,0,1080,900);Object.keys(CHARACTERS).forEach((left,row)=>Object.keys(CHARACTERS).forEach((right,col)=>{ctx.font='18px Lilita';ctx.textAlign='center';ctx.fillStyle='#85324e';ctx.fillText(CHARACTERS[left].name+' + '+CHARACTERS[right].name,180+col*360,35+row*300);ctx.save();ctx.translate(180+col*360,250+row*300);ctx.scale(1.3,1.3);drawPicnic(ctx,createCharacter({character:left,accessories:{hat:'cap'}}),createCharacter({character:right,accessories:{hat:'beanie'}}),.35);ctx.restore()}))}
+document.fonts.load('18px Lilita').then(render);
+</script>

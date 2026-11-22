@@ -82,6 +82,7 @@ function start() { if (!running) { running = true; last = performance.now(); req
 const clampX = x => Math.max(character().width, Math.min(innerWidth - character().width, x));
 function goal() {
   if (delivery.active && want.mode === 'away') return { x: innerWidth * .6, y: want.floor, then: 'idle' };
+  if (scenes[together.mode]?.resting && together.active) return { x: n.home ?? clampX(innerWidth/2), y: want.floor, then: 'idle' };
   if (want.mode === 'tab') return { x: want.x, y: want.y, then: 'stomp' };
   if (want.mode === 'free') {
     n.home ??= clampX(innerWidth * (.25 + Math.random() * .5));
@@ -204,14 +205,7 @@ function heart(colors = HEART_COLORS, from) {
 }
 function drawHearts(dt) {
   hearts = hearts.filter(h => (h.t += dt) < 1.8);
-  for (const h of hearts) {
-    const pop = h.t < .25 ? 1 + .25 * Math.sin(Math.PI * h.t / .25) : 1; // overshoots, then settles
-    const grow = Math.min(1, h.t / .12), rise = 70 * h.t + 25 * h.t * h.t;
-    ctx.globalAlpha = Math.min(1, (1.8 - h.t) / .5);
-    const x = h.toX === null ? h.x : h.x + (h.toX - h.x) * ease(Math.min(1, h.t / .8));
-    drawHeart(ctx, x + h.dir * 12 * Math.sin(2.6 * h.t + h.sway) - h.dir * 12 * Math.sin(h.sway), h.y - rise,
-              26 * grow * pop, .18 * Math.sin(2.6 * h.t + h.sway + 1), h.colors);
-  }
+  for (const h of hearts) drawHeartEffect(ctx, h);
   ctx.globalAlpha = 1;
 }
 
@@ -224,7 +218,7 @@ function frame(now) {
 
 function tick(now) {
   const dt = Math.max(.001, Math.min(.05, (now - last) / 1000)); last = now; // never 0: speeds divide by it
-  if (fan.open || together.arriving) { /* keep him still while choosing or pulling the rope */ }
+  if (fan.open || together.arriving || (scenes[together.mode]?.resting && together.active && n.state === 'idle')) { /* keep him still while choosing or pulling the rope */ }
   else if (n.state === 'walk') walk(dt);
   else if (n.state === 'leap') {
     const u = Math.min(1, (n.t += dt) / n.dur);
@@ -252,9 +246,9 @@ function tick(now) {
   const delivering = delivery.active;
   delivery.draw(ctx, { x: n.x, ground: n.y, dt, now }, character());
   if (delivering && !delivery.active && ['idle', 'stomp', 'walk'].includes(n.state)) go();
-  together.draw(ctx, { x: n.x, ground: n.y, dt, now, settled: ['idle', 'stomp'].includes(n.state) }, character(), n.state !== 'gone');
+  const sceneHit = together.draw(ctx, { x: n.x, ground: n.y, dt, now, settled: ['idle', 'stomp'].includes(n.state) }, character(), n.state !== 'gone', scenes[together.mode]);
   hit = n.state === 'gone' ? null
-    : character().draw(ctx, { x: n.x, ground: n.y, face: n.face, rot: n.rot, accel, dt, now }, motion);
+    : sceneHit || character().draw(ctx, { x: n.x, ground: n.y, face: n.face, rot: n.rot, accel, dt, now }, motion);
   drawDust(dt);
   drawHearts(dt);
   drawWords(dt);
@@ -321,10 +315,54 @@ cv.addEventListener('pointerup', e => {
 // --- Shared gestures -----------------------------------------------------------------------------
 const buddy = new BuddyClient('local-preview', null, appearance);
 let connection = null;
-const together = new Together();
-const delivery = new Delivery((action, from) => actions[action].play(from));
+const actors = new Actors();
+const together = new Together(actors);
+const delivery = new Delivery((action, from) => actions[action].play(from), actors);
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let words = [];
+const scenes = {
+  solo: {},
+  together: {},
+  picnic: {
+    resting: true,
+    draw(ctx, at, owner, guest) {
+      const separation = (owner.seated.width + guest.character.seated.width) * .29;
+      const base = ctx.getTransform(), origin = at.x + separation/2 + 5;
+      ctx.save(); ctx.translate(origin, at.ground - 18);
+      const result = drawPicnic(ctx, owner, guest.character, guest.t, reducedMotion.matches);
+      const hit = new Path2D(); hit.addPath(result.hit, base.inverse().multiply(ctx.getTransform()));
+      guest.x = origin + result.rightX; guest.y = at.ground - 18; guest.poseHeight = guest.character.seated.height;
+      ctx.restore(); return hit;
+    },
+  },
+};
+let session = { mode: 'solo' };
+function selectScene(state, peer = connection?.peer) {
+  if (!state || !Object.hasOwn(scenes, state.mode)) return false;
+  if (state.mode === 'solo') together.separate();
+  else {
+    peer ||= { id: 'preview-peer', appearance: { ...appearance(), character: Object.keys(CHARACTERS).find(id => id !== appearance().character) || appearance().character } };
+    const guest = createCharacter(peer);
+    if (!guest) return false;
+    together.join(guest, peer.id, state.mode);
+    if (want.mode === 'away') {
+      if (tauri) tauri.invoke('summon_for_together').catch(console.error);
+      else nema({ mode: 'free', floor: want.floor });
+    }
+  }
+  const changed = session.mode !== state.mode;
+  session = structuredClone(state);
+  localStorage.setItem('nematode-session', JSON.stringify({ state: session, peer }));
+  if (changed) n.home = clampX(innerWidth / 2);
+  go(); start();
+  return true;
+}
+function restoreScene() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('nematode-session') || 'null');
+    if (saved) selectScene(saved.state, saved.peer);
+  } catch (e) { console.warn('Could not restore scene', e); }
+}
 const actions = {
   heart: { visit: true, label: 'Send a heart', lines: ['Send a', 'heart'],
     icon: '<path fill="#ffcf50" stroke="#96601f" d="M12 22 2 12Q-2 2 6 2Q10 2 12 6Q16-1 22 3Q28 8 22 14Z"/><path stroke="#fff3be" d="m5 8 2-2"/>',
@@ -332,21 +370,22 @@ const actions = {
   love: { visit: true, label: 'Send I love you', lines: ['Send', 'I love you'],
     icon: '<path fill="#ffc9d9" d="M1 3Q11 0 23 3L24 18 15 19 9 25 8 19 1 18Z"/><path fill="#c84c70" stroke="none" d="m12 15-5-5q-2-5 3-4l2 2 2-2q5-1 3 4Z"/>',
     play: from => say('I love you', from) },
-  together: { receive: guest => together.join(guest), visible: () => !together.active, label: 'Be together', lines: ['Be', 'together'], icon: '<path stroke="#c53651" stroke-width="2.8" d="M0 16Q8 20 12 10C-1-6-1 25 12 10C24-6 28 23 12 10Q17 21 25 16M12 11 7 22m6-11 6 11"/>',
-    play: () => {
-      // Until paired, preview another registered character; no character names are baked into the scene.
-      const guest = createCharacter(connection?.peer) || createCharacter({ ...appearance(), character: Object.keys(CHARACTERS).find(id => id !== appearance().character) || appearance().character });
-      together.join(guest);
-    } },
-  separate: { visible: () => together.active, label: 'Separate', icon: '<path stroke="#c53651" stroke-width="2.8" d="M1 15Q5 18 8 13C-2 1 0 24 8 13m8 0c10-12 9 10 0 0q4 5 8 2M8 13l-3 9m11-9 4 9"/>',
-    play: () => { together.separate(); go(); } },
+  together: { receive: guest => together.join(guest), scene: 'together', visible: () => !together.active, label: 'Be together', lines: ['Be', 'together'], icon: '<path stroke="#c53651" stroke-width="2.8" d="M0 16Q8 20 12 10C-1-6-1 25 12 10C24-6 28 23 12 10Q17 21 25 16M12 11 7 22m6-11 6 11"/>',
+    play: () => selectScene({mode:'together'}) },
+  separate: { scene: 'solo', visible: () => together.active, label: 'Separate', icon: '<path stroke="#c53651" stroke-width="2.8" d="M1 15Q5 18 8 13C-2 1 0 24 8 13m8 0c10-12 9 10 0 0q4 5 8 2M8 13l-3 9m11-9 4 9"/>',
+    play: () => selectScene({mode:'solo'}) },
+  picnic: { scene: 'picnic', visible: () => together.mode !== 'picnic' || !together.active, label: 'Picnic Mode', lines: ['Picnic','Mode'],
+    icon: '<path fill="#fff9eb" stroke="#c57a88" d="M4 10Q12 8 22 10L25 23Q12 26 0 23Z"/><path fill="#cf5361" stroke="none" d="M5 11h5v5H4zm10 0h6l1 5h-7zM9 16h6v7H8z"/><path fill="#e5be83" stroke="#765340" d="M5 8Q12 6 20 8L18 15Q12 17 6 14ZM8 7C7-1 18-1 17 7"/>',
+    play: () => selectScene({mode:'picnic'}) },
+  end_picnic: { scene: 'together', visible: () => together.mode === 'picnic' && together.active, label: 'End picnic', lines: ['End','picnic'],
+    icon: '<path d="M3 19Q12 12 23 19L20 24Q12 20 4 24ZM8 7l8 8m0-8-8 8"/>', play: () => selectScene({mode:'together'}) },
 };
 const fan = new ActionFan(
   () => Object.entries(actions).filter(([, action]) => !action.visible || action.visible())
     .map(([id, action]) => ({ id, ...action })),
   async id => {
     actions[id].play(); start();
-    try { await buddy.send(connection ? null : 'partner-preview', id); }
+    try { await buddy.send(connection ? null : 'partner-preview', actions[id].scene ? 'scene' : id, actions[id].scene ? {state:session} : {}); }
     catch (e) { console.error(e); say('Couldn’t send'); }
   },
   () => { setHover(false); tauri?.invoke('release'); },
@@ -357,7 +396,7 @@ function receiveGesture(event, complete = () => {}) {
   if (!Object.hasOwn(actions, event.action) || !Object.hasOwn(CHARACTERS, event.payload.character)) return false;
   const action = actions[event.action], sender = createCharacter(event.payload);
   if (action.receive) action.receive(sender);
-  else if (action.visit) delivery.enqueue(sender, event.action, complete);
+  else if (action.visit) delivery.enqueue(sender, event.action, complete, event.from);
   else return false;
   nema({ ...want });
   return true;
@@ -371,18 +410,8 @@ if (BACKEND_URL && !new URLSearchParams(location.search).has('demo')) {
       isActive: async () => tauri ? await tauri.invoke('user_active') : true,
       canPlay: () => !drag && !press && !fan.open && !['held', 'fly', 'leap'].includes(n.state),
       onGesture: receiveGesture,
-      onState: state => {
-        if (state.active) {
-          const guest = createCharacter(state.peer);
-          if (!guest) return false;
-          together.join(guest);
-          if (want.mode === 'away') {
-            if (tauri) tauri.invoke('summon_for_together').catch(console.error);
-            else nema({mode:'free', floor:want.floor});
-          }
-        } else { together.separate(); go(); }
-        start();
-      },
+      onUpdate: version => tauri?.invoke('request_update', { version }),
+      onState: state => selectScene(state.scene || {mode:state.active ? 'together' : 'solo'}, state.peer),
     });
     buddy.id = connection.state.id;
     buddy.transport = connection;
@@ -390,13 +419,15 @@ if (BACKEND_URL && !new URLSearchParams(location.search).has('demo')) {
     Promise.all([tauri?.invoke('get_character'), tauri?.invoke('get_hat')]).then(([id, hat]) => {
       if (id) setCharacter(id);
       if (hat) setHat(hat);
-      connection.start();
+      restoreScene(); connection.start();
     }).catch(console.error);
   } catch (e) {
     buddy.transport = { send: async () => { throw e; } };
     console.error(e); say('Couldn’t connect');
   }
 }
+
+if (!connection) Promise.all([tauri?.invoke('get_character'), tauri?.invoke('get_hat')]).then(restoreScene);
 
 function say(text, from) {
   words.push({ text, x: from?.x ?? n.x, y: from ? from.y - 36 : n.y - character().height - 44, t: 0 });
@@ -425,7 +456,7 @@ cv.addEventListener('pointercancel', () => {
 
 // Shared by the debug menu and browser previews; choose a distinct sender from the registry.
 function previewReceive(action, sender = Object.keys(CHARACTERS).find(id => id !== appearance().character)) {
-  return buddy.receive({ id: crypto.randomUUID(), from: 'preview-sender', to: buddy.id,
+  return buddy.receive({ id: crypto.randomUUID(), from: 'preview-peer', to: buddy.id,
     action, payload: { character: sender, appearance: { ...appearance(), character: sender } } });
 }
 

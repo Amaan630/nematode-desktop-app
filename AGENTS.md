@@ -6,6 +6,21 @@ When you change how something works, update this file in the same commit.
 
 ---
 
+## Accepted release baseline — v0.3.12
+
+On November 22, 2026, Amaan explicitly confirmed **v0.3.12 is a successful, “perfect” release** and
+**the first release his fiancée has really used**. Treat it as the accepted baseline for their Mac/Windows
+use, not an experimental or failed release. Preserve its approved character designs, hats, gestures,
+zero-setup connection, auto-updates, and Windows fullscreen behavior when making future changes.
+
+Release: <https://github.com/Amaan630/nematode-desktop-app/releases/tag/v0.3.12>.
+Both platform builds passed, the published assets/site were verified, and Amaan’s installed Mac app was
+verified on v0.3.12. His acceptance establishes real user use on Windows; it does not claim that every
+Windows edge case was independently tested. Future issues should be investigated as specific issues
+against this successful baseline.
+
+---
+
 ## 1. What this is
 
 **Nematode** is a desktop buddy for Mac and Windows. A small character lives in a transparent, click-through
@@ -333,7 +348,7 @@ character" sections describe the architecture for humans.
 - **Windows type-check on a Mac**: a full `cargo check --target x86_64-pc-windows-msvc` fails because `ring`
   (via the updater) needs a Windows C compiler. Copy `src-tauri` to a scratch dir, remove `tauri-plugin-updater`
   from Cargo.toml/main.rs/tauri.conf.json and stub `update.rs`, put a no-op `llvm-rc` on PATH, then check. CI is the
-  real Windows build. Nothing has ever run on a real Windows PC — say so when relevant.
+  real Windows build. The owner confirmed real Windows use of v0.3.12; distinguish that acceptance from our own compile checks.
 
 ---
 
@@ -359,7 +374,8 @@ character" sections describe the architecture for humans.
 
 ## 9. Open items / not done
 
-- Windows has never been run on a real PC (tab detection, updates, shortcut icons are compile-checked only).
+- v0.3.12 is user-accepted in real Mac/Windows use (see the accepted release baseline above).
+  Exhaustive Windows tab detection, fullscreen, update, and shortcut-icon checks remain unverified.
 - No Apple Developer ID / notarization yet (owner's choice for now); no Windows code-signing certificate.
 - `Mac Dock tile`: users who pinned Nematode before v0.3.3 must re-pin once for the Dock icon to follow.
 
@@ -452,3 +468,26 @@ playground, website, shared gestures, and menu previews.
 window, the desktop, and minimized windows. The presence poll hides/shows the overlay without changing
 summon state. Ordinary maximized/snapped windows do not suppress it. The activity gate also defers incoming
 gestures during fullscreen, so hidden animations are not acknowledged. macOS is unchanged.
+
+### Picnic and shared actors (v0.3.13)
+
+The fan has four segments, with a wider radius derived from the action count. Picnic Mode seats both
+characters on the hand-drawn checkered blanket. End picnic returns to Together; Separate leaves the shared
+scene. All three characters own sit/cuddle poses and seated dimensions; hats use their usual head attachment.
+Nematode's resting spine tucks the tail while keeping the upper body upright. Do not increase whole-body
+curl for a seated pose. `scripts/picnic.html` and `scripts/picnic-pairs.html` compose real app drawings.
+
+`src/actors.js` owns one remote actor per installation ID. Together and Delivery acquire that actor rather
+than creating competing visitors. A gesture uses the existing scene actor when present, including during
+arrival; otherwise Delivery owns its temporary walk-in/out. Persistent actors keep their current outfit.
+
+`overlay.js` owns the scene registry and saves the complete `{state, peer}` session on each transition.
+New modes add presentation in that registry and use the same `scene` action, storage and restore path.
+Unknown modes are retained by the connection and retried after an app update. The server preserves bounded
+state JSON and orders it with legacy Together/Separate actions. Apply `0003_scene.sql` before deployment.
+
+Release publication can send a WebSocket update hint through the authenticated `/release` hook. Terraform
+binds the secret; GitHub Actions posts after publishing. The native updater still downloads only the signed
+GitHub update, coalesces checks, and retains launch/daily checks. Summoning uses its existing one-use marker;
+shared scene state restores through the normal session path, without mode-specific updater branches.
+The scene migration and release hook were deployed through Terraform on 2026-11-22, preserving both users and stored actions. The release hook secret is configured in GitHub Actions. See cloudflare/README.md.
