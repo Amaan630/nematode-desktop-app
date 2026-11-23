@@ -50,7 +50,9 @@ try {
   await run(`document.fonts.load('14px "Lilita One"')`);
   // Keep the approved release drawings intact while adding transition frames.
   for (const id of ['nematode','croissant','kitten']) {
-    const source=execFileSync('git',['show',`v0.3.13:src/characters/${id}.js`],{encoding:'utf8'});
+    let source=execFileSync('git',['show',`v0.3.13:src/characters/${id}.js`],{encoding:'utf8'});
+    // Approved correction: all planted kitten paws share the ground plane.
+    if(id==='kitten')source=source.replace('y:(far?-6:0)-lift','y:-lift');
     await run(`{
       const released={};new Function('CHARACTERS','drawHat',${JSON.stringify(source)})(released,drawHat);
       for(const state of ['idle','walk','held','fly','stomp','sit','cuddle'])
@@ -267,6 +269,7 @@ try {
       'every action automatically captures the complete appearance');
     together.guest=null; together.active=false;
   `);
+  await call('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
   await run(`
     actors.byId.clear();delivery.guest=null;delivery.queue.length=0;together.guest=null;together.active=false;together.presentation=null;
     setCharacter('kitten');setHat('cap');
@@ -290,9 +293,81 @@ try {
       check(localStorage.getItem('nematode-session')===saved,'Restoration preserves future state fields');
     }
     openFan();check(fan.element.textContent.includes('Endpicnic'),'End picnic replaces picnic');fan.hide();
+    openFan();
+    check(!fan.element.textContent.includes('Separate') && !fan.element.textContent.includes('Betogether'),'Picnic exposes only its own exit action');
+    fan.hide();
+    {
+    const scene=together.presentation, guest=together.guest;
+    const before={x:n.x,y:n.y,gx:guest.x,gy:guest.y,phase:scene.phase,sit:scene.sit};
+    cv.setPointerCapture=()=>{};
+    // Grab the companion, not just the resident; both must belong to the scene hit area.
+    check(isOver(guest.x,guest.y-20),'Companion is part of the scene drag target');
+    const pointer=(type,x,y)=>{const e=new PointerEvent(type,{clientX:x,clientY:y,button:0,pointerId:1,bubbles:true});Object.defineProperty(e,'timeStamp',{value:last});cv.dispatchEvent(e);};
+    pointer('pointerdown',guest.x,guest.y-20);
+    pointer('pointermove',before.gx+80,before.gy-70);
+    step(.5);
+    check(n.x===before.x+80 && n.y===before.y-50,'Scene drag translates resident');
+    check(guest.x===before.gx+80 && guest.y===before.gy-50,'Scene drag translates companion equally');
+    check(scene.phase===before.phase && scene.sit===before.sit && n.state!=='held','Scene drag preserves seated poses');
+    check(Math.abs(scene.anchor.angle)>.001,'Held picnic has weight and swing');
+    pointer('pointerup',before.gx+80,before.gy-70);step(.08);
+    check(scene.anchor.falling && n.y>before.y-50,'Released picnic falls under gravity');
+    nema({...want});step(.08);
+    check(n.state==='idle' && scene.anchor.falling,'Presence refresh keeps scene physics in control');
+    step(4);
+    check(!scene.moving && Math.abs(scene.anchor.angle)<.002,'Picnic settles upright after landing');
+    check(Math.abs(n.y+scene.anchor.basketDrop+3.5-want.floor)<.1,'Basket settles on the same floor as the blanket');
+    check(n.y>before.y-50 && n.y<=want.floor,'Picnic lands on the desktop floor');
+    check(Math.abs((guest.x-n.x)-(before.gx-before.x))<.01,'Landing preserves the composition');
+    const gap=(character().seated.width+guest.character.seated.width)*.29;
+    const width=(character().seated.width+guest.character.seated.width)*.65+100;
+    const targets=[()=>[n.x,n.y-40],()=>[n.x-gap/2,n.y+2],
+      ()=>[n.x-gap/2-width/2-guest.character.width*.30,n.y-12]];
+    for(const target of targets){
+      const [x,y]=target(),oldX=n.x,oldY=n.y,oldGuest=guest.x;
+      check(isOver(x,y),'Resident, blanket and basket belong to the scene hit area');
+      pointer('pointerdown',x,y);pointer('pointermove',x+12,y-70);step(.1);
+      check(Math.abs(n.x-oldX-12)<.01 && Math.abs(n.y-oldY+70)<.01 && Math.abs(guest.x-oldGuest-12)<.01,'Every picnic part drags the whole physical scene');
+      cv.dispatchEvent(new PointerEvent('pointercancel',{pointerId:1}));step(.1);
+      check(!scene.dragging && scene.anchor.falling && n.state!=='fly','Pointer cancellation drops the scene as one body');
+      step(4);
+    }
+    openFan();pick('End picnic');
+    check(session.mode==='together','End picnic returns to walking together');
+    step(18);
+    }
+
   `);
   await call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile('/private/tmp/nematode-picnic-mode.png',Buffer.from(r.data,'base64')));
   await run(`
+    const supports=[[-130,12],[100,12],[-130,-100],[100,-100]];
+    const landings=[];
+    for(const hz of [30,60,144]){
+      const body=new PicnicBody(350,330);body.grab({x:350,y:280});body.move(30,-70);
+      body.step(1/60,550,900,supports,false);
+      check(body.angle!==0 && body.flutter>0,'Drag motion drives swing and cloth');
+      const before={x:body.x,y:body.ground};body.release({vx:420,vy:-240});
+      body.step(1/hz,550,900,supports,false);
+      check(body.x>before.x && body.ground<before.y,'Release preserves throw momentum');
+      for(let i=0;i<hz*6;i++)body.step(1/hz,550,900,supports,false);
+      check(!body.falling && Math.abs(body.ground-538)<.01,'Gravity lands the blanket edge on the floor');
+      check(body.x>=130 && body.x<=800,'Whole scene stays inside horizontal bounds');
+      check(Math.abs(body.basket)<.002 && body.flutter<.01,'Basket and cloth settle without idle wobble');
+      landings.push(body.x);
+    }
+    check(Math.max(...landings)-Math.min(...landings)<12,'Physics remains consistent across frame rates: '+landings.join(','));
+    {
+      const body=new PicnicBody(400,200);body.grab({x:400,y:150});body.move(80,-40);
+      body.step(1/60,550,900,supports,false);body.release({vx:500,vy:100});
+      body.step(.05,550,900,supports,false);
+      const point=body.matrix.transformPoint({x:body.x-40,y:body.ground-20});
+      const before=body.matrix.transformPoint({x:body.x,y:body.ground});
+      body.grab(point);
+      const after=body.matrix.transformPoint({x:body.x,y:body.ground});
+      check(Math.hypot(before.x-after.x,before.y-after.y)<.01,'Airborne re-grab preserves the visible pose');
+      body.release();for(let i=0;i<360;i++)body.step(1/60,550,900,supports,true);
+      check(!body.falling && body.angle===0 && body.flutter===0,'Reduced motion retains gravity without decorative sway');
+    }
     // The curled and flat cloth meet at the same material edge, throughout unfurling.
     for(const spread of [0,.1,.5,.9,.999,1])for(const v of [0,.5,1]) {
       const a=blanketPoint(220,52,spread,spread,v);
@@ -377,6 +452,6 @@ try {
 } finally {
   socket?.close();
   chrome.kill();
-  await new Promise(resolve => chrome.exitCode !== null ? resolve() : chrome.once('exit', resolve));
+  await new Promise(resolve => chrome.exitCode !== null || chrome.signalCode !== null ? resolve() : chrome.once('exit', resolve));
   await rm(profile, { recursive: true, force: true });
 }

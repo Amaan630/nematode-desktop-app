@@ -507,3 +507,32 @@ owns its in-between drawing: Kitten plants its forepaws, lowers its haunches, an
 settles onto its stubby feet; Nematode curls from the tail upward. No shared skeleton or joint renderer.
 Absent `motion.sit` keeps the existing state drawing. Hats continue to use the original head attachment.
 Review the complete rendered entrance and exit, including the frames between poses, before any release.
+
+### Scene input and menu ownership
+
+The selected `session.mode` and its scene registry entry own available mode actions. Fan actions must not
+infer mode from a companion's existence or arrival state. Picnic exposes hearts, love, and End picnic;
+End picnic still packs up and returns to Together. Only Together offers Separate.
+
+A presentation may expose `placement` as the resident movement goal and `dragTarget(pointer)`, returning `move(dx,dy)` and
+`release({vx,vy})`. The overlay routes dragging to that target instead of putting a character into held/fly states.
+Picnic's anchor is its placement authority; its hit area combines both actors, blanket and basket. Dragging
+moves one physical body and pauses choreography. Release transfers pointer momentum; cancellation drops
+with zero initial velocity. The scene then falls, bounces softly, and settles at the desktop floor.
+The actor coordinator's rope input lock does not apply to presentations. New scenes declare actions and
+interaction ownership rather than adding scene-name conditions to pointer handlers.
+
+Kitten's planted far paws now use the same ground plane as the near paws; gait lift remains unchanged.
+This is an intentional correction to the v0.3.13 drawing baseline, including sitting-transition start frames
+and generated previews. Preserve the rest of the released character drawing and ink widths.
+
+`PicnicBody` owns gravity, collision bounds, the suspension point, and damped group/basket rotation.
+The scene's draw and hit paths use the same body transform. Blanket ripple is driven by motion and impact,
+not an idle timer; basket rotation pivots about its handle. Settled characters keep their original poses.
+Use integer-count substeps (at most 1/120 s); a floating-point remainder step once cancelled a bounce at 30 Hz.
+The overlay samples release momentum once for either a character or a scene. Stopping before release
+produces a drop, not a stale throw. Native presence refreshes respect scene placement during flight;
+queued gestures and scene exits wait until landing. Reduced motion retains gravity but omits prop sway.
+Tests cover drops, throws, mid-air catches, all drag targets, cancellation, and 30/60/144 Hz settling.
+
+Release 0.3.15 includes the scene interaction ownership, picnic physics, and kitten paw corrections above.

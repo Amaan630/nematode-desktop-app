@@ -163,3 +163,12 @@ drawing functions own their custom sitting movement through `motion.sit`; no sce
 shared joint system, opacity crossfade, or rope entrance. Inspect full motion at desktop size as well as
 individual frames. Pixel comparisons against v0.3.13 protect the existing art; they do not establish that
 new in-between frames look good.
+
+Picnic is one movable composition. Either character, the blanket, or basket can initiate the same drag;
+the whole arrangement has weight and swings around the grab point, keeping the characters seated.
+Release carries pointer momentum into gravity, a small bounce, and a soft landing. The basket swings
+from its handle; the blanket has a small motion-driven edge ripple. Both settle rather than wobbling forever.
+The physical floor supports the blanket edge, not just the character origins. Re-grabbing mid-air must
+preserve the visible pose. Reduced motion keeps the drop and landing while omitting decorative sway.
+Picnic's menu has Send a heart, Send I love you, and End picnic. The last action packs up and returns to
+walking together. The kitten's four planted paws share a ground line; only a swinging paw lifts above it.

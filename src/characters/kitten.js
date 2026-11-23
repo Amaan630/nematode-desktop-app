@@ -9,7 +9,7 @@ function drawKitten(c, x, y, z=1, phase=0, moving=false, hat='none', face=1, sea
    const u=((phase/(Math.PI*2)+offset)%1+1)%1;
    let dx=0,lift=0;
    if(moving){if(u<.7)dx=5-10*u/.7;else{const v=(u-.7)/.3;dx=-5+10*(v-Math.sin(2*Math.PI*v)/(2*Math.PI));lift=4.5*Math.sin(Math.PI*v)**2}}
-   return {x:hip+dx,y:(far?-6:0)-lift};
+   return {x:hip+dx,y:-lift};
  };
  const settling=sit>0 && sit<1;
  const ease=(a,b)=>{const t=Math.max(0,Math.min(1,(sit-a)/(b-a)));return t*t*(3-2*t)};
@@ -63,9 +63,9 @@ function drawKitten(c, x, y, z=1, phase=0, moving=false, hat='none', face=1, sea
      const mix=(a,b)=>a+(b-a)*v;
      const point=(ax,ay,bx,by)=>`${mix(ax,bx)} ${mix(ay,by)-step}`;
      const d=far
-       ? `M${point(27,-25,-10,-22)}Q${point(26,-15,-12,-10)} ${point(32,-11,-9,-5)}
-           Q${point(30,-6,-5,0)} ${point(34,-6,1,-4)}L${point(40,-6,2,-22)}
-           Q${point(42,-8,2,-22)} ${point(38,-10,2,-22)}Q${point(36,-15,2,-22)} ${point(35,-25,2,-22)}`
+       ? `M${point(27,-25,-10,-22)}Q${point(26,-15,-12,-10)} ${point(32,-5,-9,-5)}
+           Q${point(30,0,-5,0)} ${point(34,0,1,-4)}L${point(40,0,2,-22)}
+           Q${point(42,-2,2,-22)} ${point(38,-4,2,-22)}Q${point(36,-15,2,-22)} ${point(35,-25,2,-22)}`
        : `M${point(31,-26,18,-20)}Q${point(29,-18,20,-9)} ${point(20,-5,18,-4)}
            Q${point(25,-2,11,-1)} ${point(22,0,8,-6)}L${point(14,0,8,-22)}
            Q${point(11,0,8,-22)} ${point(12,-5,8,-22)}Q${point(13,-12,8,-22)} ${point(12,-18,8,-22)}`;
@@ -73,10 +73,10 @@ function drawKitten(c, x, y, z=1, phase=0, moving=false, hat='none', face=1, sea
      path(d,color);
    };
    if(paws<1){
-     const x=35-39*paws, hip=31-35*paws,y=-6+2*paws;
+     const x=35-39*paws, hip=31-35*paws,y=-4*paws;
      path(`M${hip-4} -25Q${hip-5} -15 ${x-3} ${y-5}Q${x-5} ${y} ${x-1} ${y}L${x+5} ${y}Q${x+7} ${y-2} ${x+3} ${y-4}Q${hip+5} -15 ${hip+4} -25Z`,shadow);
    }
-   const h=-11-13*lower, hy=-6-8*lower;
+   const h=-11-13*lower, hy=-14*lower;
    path(`M${-16-12*lower} ${-25+19*lower}Q${-17-12*lower} -15 ${h-3} ${hy-5}
      Q${h-5} ${hy} ${h-1} ${hy}L${h+5} ${hy}Q${h+7} ${hy-2} ${h+3} ${hy-4}
      Q${-7-12*lower} -15 ${-8-12*lower} ${-25+19*lower}Z`,shadow);

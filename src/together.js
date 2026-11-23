@@ -28,7 +28,7 @@ class Together {
     if (this.guest) { this.guest.leaving = true; this.guest.t = 0; }
   }
 
-  get arriving() { return this.active && !this.guest?.waiting && this.guest?.t < 2; }
+  get locksInput() { return !this.presentation && this.active && !this.guest?.waiting && this.guest?.t < 2; }
 
   draw(ctx, at, owner, visible) {
     const g = this.guest;

@@ -82,8 +82,10 @@ function start() { if (!running) { running = true; last = performance.now(); req
 // --- Deciding where to go ------------------------------------------------------------------------
 const clampX = x => Math.max(character().width, Math.min(innerWidth - character().width, x));
 function goal() {
+  const placement=together.presentation?.placement;
+  if (placement) return placement;
   if (delivery.active && want.mode === 'away') return { x: innerWidth * .6, y: want.floor, then: 'idle' };
-  if (together.presentation || (scenes[together.mode]?.resting && together.active)) return { x: n.home ?? clampX(innerWidth/2), y: want.floor, then: 'idle' };
+  if (together.presentation || (scenes[session.mode]?.resting && together.active)) return { x: n.home ?? clampX(innerWidth/2), y: want.floor, then: 'idle' };
   if (want.mode === 'tab') return { x: want.x, y: want.y, then: 'stomp' };
   if (want.mode === 'free') {
     n.home ??= clampX(innerWidth * (.25 + Math.random() * .5));
@@ -219,7 +221,7 @@ function frame(now) {
 
 function tick(now) {
   const dt = Math.max(.001, Math.min(.05, (now - last) / 1000)); last = now; // never 0: speeds divide by it
-  if (fan.open || together.arriving || ((together.presentation || (scenes[together.mode]?.resting && together.active)) && n.state === 'idle')) { /* keep him still while choosing or pulling the rope */ }
+  if (fan.open || together.locksInput || ((together.presentation || (scenes[session.mode]?.resting && together.active)) && n.state === 'idle')) { /* keep him still while choosing or pulling the rope */ }
   else if (n.state === 'walk') walk(dt);
   else if (n.state === 'leap') {
     const u = Math.min(1, (n.t += dt) / n.dur);
@@ -233,7 +235,7 @@ function tick(now) {
 
   // The moment, described for whichever character is out.
   const motion = { state: n.state, phase: n.phase, t: n.t, stretch: 1, hop: 0, crouch: 0, impact: 0, airborne: false };
-  if (fan.open || together.arriving) motion.state = 'idle';
+  if (fan.open || together.locksInput) motion.state = 'idle';
   else if (n.state === 'stomp') Object.assign(motion, stomp(n.t));
   else if (n.state === 'leap') Object.assign(motion, { stretch: 1.12 - .2 * n.t / n.dur, airborne: true });
   else if (n.state === 'fly') Object.assign(motion, { stretch: 1 - n.squash, impact: n.squash, airborne: true });
@@ -247,7 +249,11 @@ function tick(now) {
   const delivering = delivery.active;
   delivery.draw(ctx, { x: n.x, ground: n.y, dt, now }, character());
   if (delivering && !delivery.active && ['idle', 'stomp', 'walk'].includes(n.state)) go();
-  const sceneHit = together.draw(ctx, { x: n.x, ground: n.y, dt, now, settled: ['idle', 'stomp'].includes(n.state) }, character(), n.state !== 'gone');
+  const scenePlacement=together.presentation?.placement;
+  const sceneHit = together.draw(ctx, { x: n.x, ground: n.y, dt, now, floor:want.floor, screenWidth:innerWidth, settled: ['idle', 'stomp'].includes(n.state) }, character(), n.state !== 'gone');
+  const placement=together.presentation?.placement;
+  if (placement) Object.assign(n,{x:placement.x,y:placement.y,home:placement.x});
+  if (scenePlacement && !placement) go();
   hit = n.state === 'gone' ? null
     : sceneHit || character().draw(ctx, { x: n.x, ground: n.y, face: n.face, rot: n.rot, accel, dt, now }, motion);
   drawDust(dt);
@@ -281,20 +287,23 @@ function grab() {
   clearTimeout(press.timer);
   cv.style.cursor = 'grabbing';
   drag = press; press = null;
-  Object.assign(n, { state: 'held', vx: 0, vy: 0 });
+  drag.target = together.presentation?.dragTarget?.({x:drag.x,y:drag.y});
+  if (!drag.target) Object.assign(n, { state: 'held', vx: 0, vy: 0 });
   start();
 }
 cv.addEventListener('pointermove', e => {
   if (press && (Math.hypot(e.clientX - press.x, e.clientY - press.y) > CLICK_PX || e.timeStamp - press.at > CLICK_S * 1000)) grab();
   if (!drag) return press || tauri || (n.cursor = [e.clientX, e.clientY], setHover(isOver(e.clientX, e.clientY))); // browser preview
-  n.x += e.clientX - drag.x; n.y += e.clientY - drag.y;
+  const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+  if (drag.target) drag.target.move(dx,dy);
+  else { n.x += dx; n.y += dy; }
   drag.x = e.clientX; drag.y = e.clientY;
   drag.hist.push([e.timeStamp, e.clientX, e.clientY]);
   while (drag.hist.length > 2 && e.timeStamp - drag.hist[0][0] > 80) drag.hist.shift();
-  n.rot += (Math.max(-.6, Math.min(.6, (e.clientX - drag.hist[0][1]) * .01)) - n.rot) * .3; // swing with the drag
+  if (!drag.target) n.rot += (Math.max(-.6, Math.min(.6, (e.clientX - drag.hist[0][1]) * .01)) - n.rot) * .3; // swing with the drag
 });
 cv.addEventListener('pointerdown', e => {
-  if (e.button !== 0 || e.ctrlKey || fan.open || together.arriving) return;
+  if (e.button !== 0 || e.ctrlKey || fan.open || together.locksInput) return;
   if (!isOver(e.clientX, e.clientY)) return;
   cv.setPointerCapture(e.pointerId);
   press = { x: e.clientX, y: e.clientY, at: e.timeStamp, hist: [[e.timeStamp, e.clientX, e.clientY]] };
@@ -306,8 +315,13 @@ cv.addEventListener('pointerup', e => {
   if (!drag) return;
   const [t0, x0, y0] = drag.hist[0], dt = Math.max(.016, (e.timeStamp - t0) / 1000);
   const clamp = v => Math.max(-4000, Math.min(4000, v));
-  Object.assign(n, { state: 'fly', vx: clamp((e.clientX - x0) / dt), vy: clamp((e.clientY - y0) / dt), t: 0 });
-  n.vr = Math.max(-14, Math.min(14, n.vx * .006));
+  const stopped=e.timeStamp-drag.hist.at(-1)[0]>80;
+  const velocity={vx:stopped?0:clamp((e.clientX-x0)/dt),vy:stopped?0:clamp((e.clientY-y0)/dt)};
+  if (drag.target) drag.target.release(velocity);
+  else {
+    Object.assign(n, {state:'fly',...velocity,t:0});
+    n.vr=Math.max(-14,Math.min(14,n.vx*.006));
+  }
   drag = null;
   cv.style.cursor = 'grab';
   tauri?.invoke('release'); // hand focus back to Chrome
@@ -322,9 +336,10 @@ const delivery = new Delivery((action, from) => actions[action].play(from), acto
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let words = [];
 const scenes = {
-  solo: {},
-  together: {},
+  solo: { actions: ['together','picnic'] },
+  together: { actions: ['separate','picnic'] },
   picnic: {
+    actions: ['end_picnic'],
     resting: true,
     create: guest => new PicnicScene(guest),
   },
@@ -346,8 +361,11 @@ function selectScene(state, peer = connection?.peer) {
   const changed = session.mode !== state.mode;
   session = structuredClone(state);
   localStorage.setItem('nematode-session', JSON.stringify({ state: session, peer }));
-  if (changed) n.home = clampX(innerWidth / 2);
-  go(); start();
+  if (!together.presentation?.placement) {
+    if (changed) n.home = clampX(innerWidth / 2);
+    go();
+  }
+  start();
   return true;
 }
 function restoreScene() {
@@ -363,18 +381,18 @@ const actions = {
   love: { visit: true, label: 'Send I love you', lines: ['Send', 'I love you'],
     icon: '<path fill="#ffc9d9" d="M1 3Q11 0 23 3L24 18 15 19 9 25 8 19 1 18Z"/><path fill="#c84c70" stroke="none" d="m12 15-5-5q-2-5 3-4l2 2 2-2q5-1 3 4Z"/>',
     play: from => say('I love you', from) },
-  together: { receive: guest => together.join(guest), scene: 'together', visible: () => !together.active, label: 'Be together', lines: ['Be', 'together'], icon: '<path stroke="#c53651" stroke-width="2.8" d="M0 16Q8 20 12 10C-1-6-1 25 12 10C24-6 28 23 12 10Q17 21 25 16M12 11 7 22m6-11 6 11"/>',
+  together: { receive: (guest,id) => selectScene({mode:'together'}, {id,appearance:guest.appearance}), scene: 'together', label: 'Be together', lines: ['Be', 'together'], icon: '<path stroke="#c53651" stroke-width="2.8" d="M0 16Q8 20 12 10C-1-6-1 25 12 10C24-6 28 23 12 10Q17 21 25 16M12 11 7 22m6-11 6 11"/>',
     play: () => selectScene({mode:'together'}) },
-  separate: { scene: 'solo', visible: () => together.active, label: 'Separate', icon: '<path stroke="#c53651" stroke-width="2.8" d="M1 15Q5 18 8 13C-2 1 0 24 8 13m8 0c10-12 9 10 0 0q4 5 8 2M8 13l-3 9m11-9 4 9"/>',
+  separate: { scene: 'solo', label: 'Separate', icon: '<path stroke="#c53651" stroke-width="2.8" d="M1 15Q5 18 8 13C-2 1 0 24 8 13m8 0c10-12 9 10 0 0q4 5 8 2M8 13l-3 9m11-9 4 9"/>',
     play: () => selectScene({mode:'solo'}) },
-  picnic: { scene: 'picnic', visible: () => together.mode !== 'picnic' || !together.active, label: 'Picnic Mode', lines: ['Picnic','Mode'],
+  picnic: { scene: 'picnic', label: 'Picnic Mode', lines: ['Picnic','Mode'],
     icon: '<path fill="#fff9eb" stroke="#c57a88" d="M4 10Q12 8 22 10L25 23Q12 26 0 23Z"/><path fill="#cf5361" stroke="none" d="M5 11h5v5H4zm10 0h6l1 5h-7zM9 16h6v7H8z"/><path fill="#e5be83" stroke="#765340" d="M5 8Q12 6 20 8L18 15Q12 17 6 14ZM8 7C7-1 18-1 17 7"/>',
     play: () => selectScene({mode:'picnic'}) },
-  end_picnic: { scene: 'together', visible: () => together.mode === 'picnic' && together.active, label: 'End picnic', lines: ['End','picnic'],
+  end_picnic: { scene: 'together', label: 'End picnic', lines: ['End','picnic'],
     icon: '<path d="M3 19Q12 12 23 19L20 24Q12 20 4 24ZM8 7l8 8m0-8-8 8"/>', play: () => selectScene({mode:'together'}) },
 };
 const fan = new ActionFan(
-  () => Object.entries(actions).filter(([, action]) => !action.visible || action.visible())
+  () => Object.entries(actions).filter(([id, action]) => !action.scene || scenes[session.mode].actions.includes(id))
     .map(([id, action]) => ({ id, ...action })),
   async id => {
     actions[id].play(); start();
@@ -388,7 +406,7 @@ const fan = new ActionFan(
 function receiveGesture(event, complete = () => {}) {
   if (!Object.hasOwn(actions, event.action) || !Object.hasOwn(CHARACTERS, event.payload.character)) return false;
   const action = actions[event.action], sender = createCharacter(event.payload);
-  if (action.receive) action.receive(sender);
+  if (action.receive) action.receive(sender,event.from);
   else if (action.visit) delivery.enqueue(sender, event.action, complete, event.from);
   else return false;
   nema({ ...want });
@@ -401,7 +419,7 @@ if (BACKEND_URL && !new URLSearchParams(location.search).has('demo')) {
     connection = new CloudConnection(BACKEND_URL, {
       appearance,
       isActive: async () => tauri ? await tauri.invoke('user_active') : true,
-      canPlay: () => !drag && !press && !fan.open && !['held', 'fly', 'leap'].includes(n.state),
+      canPlay: () => !together.presentation?.moving && !drag && !press && !fan.open && !['held', 'fly', 'leap'].includes(n.state),
       onGesture: receiveGesture,
       onUpdate: version => tauri?.invoke('request_update', { version }),
       onState: state => selectScene(state.scene || {mode:state.active ? 'together' : 'solo'}, state.peer),
@@ -432,7 +450,7 @@ function drawWords(dt) {
 }
 cv.addEventListener('contextmenu', e => {
   e.preventDefault();
-  if (drag || press || n.state === 'gone' || !isOver(e.clientX, e.clientY)) return;
+  if (drag || press || together.presentation?.moving || n.state === 'gone' || !isOver(e.clientX, e.clientY)) return;
   if (fan.open) fan.hide();
   else { fan.show(n.x, n.y - character().height, n.y); setHover(true); }
 });
@@ -443,7 +461,11 @@ addEventListener('resize', () => fan.hide());
 addEventListener('blur', () => fan.hide());
 cv.addEventListener('pointercancel', () => {
   if (press) { clearTimeout(press.timer); press = null; }
-  if (drag) { drag = null; Object.assign(n, { state: 'fly', vx: 0, vy: 0, vr: 0, t: 0 }); }
+  if (drag) {
+    if (drag.target) drag.target.release();
+    else Object.assign(n, { state: 'fly', vx: 0, vy: 0, vr: 0, t: 0 });
+    drag = null;
+  }
   tauri?.invoke('release');
 });
 
