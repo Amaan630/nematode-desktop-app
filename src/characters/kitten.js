@@ -1,5 +1,5 @@
 // Orange tabby: four staggered paws, a closed tail, and hats fitted to the head.
-function drawKitten(c, x, y, z=1, phase=0, moving=false, hat='none', face=1, seated=false, cuddle=0) {
+function drawKitten(c, x, y, z=1, phase=0, moving=false, hat='none', face=1, seated=false, cuddle=0, sit=seated?1:0) {
  const ink='#68422e',orange='#ffc45d',shadow='#eaa042',cream='#fff0ce',stripe='#e78b32';
  const hit = new Path2D(), base = c.getTransform();
  c.save();c.translate(x,y);c.scale(z*face,z);c.lineJoin=c.lineCap='round';
@@ -11,7 +11,97 @@ function drawKitten(c, x, y, z=1, phase=0, moving=false, hat='none', face=1, sea
    if(moving){if(u<.7)dx=5-10*u/.7;else{const v=(u-.7)/.3;dx=-5+10*(v-Math.sin(2*Math.PI*v)/(2*Math.PI));lift=4.5*Math.sin(Math.PI*v)**2}}
    return {x:hip+dx,y:(far?-6:0)-lift};
  };
- if (seated) {
+ const settling=sit>0 && sit<1;
+ const ease=(a,b)=>{const t=Math.max(0,Math.min(1,(sit-a)/(b-a)));return t*t*(3-2*t)};
+ const lower=ease(.12,.8), paws=ease(0,.65), wrap=ease(.3,1), tailDown=ease(.3,.65);
+ if (settling) {
+   // Plant the forepaws, lower the haunches, then sweep the tail around them.
+   const rearX=-38+14*lower, rearY=-25+19*lower;
+   const shoulderX=31-16*paws, shoulderY=-26-10*paws;
+   // The tail lowers behind the haunch before curling along the blanket, without changing drawings.
+   const cubic=(points,t)=>{const u=1-t;return [0,1].map(i=>u*u*u*points[0][i]+3*u*u*t*points[1][i]+3*u*t*t*points[2][i]+t*t*t*points[3][i])};
+   const standingTail=[
+     [[-31,-24],[-43,-24],[-52,-32],[-53,-43]],
+     [[-53,-43],[-54,-50],[-51,-54],[-47,-53]],
+     [[-47,-53],[-43,-52],[-45,-48],[-46,-46]],
+     [[-46,-46],[-49,-39],[-41,-33],[-31,-33]],
+   ];
+   const restingTail=[
+     [[-25,-9],[-31.6666667,-6.3333333],[-33.3333333,-3.3333333],[-30,0]],
+     [[-30,0],[-16,5.3333333],[-.3333333,7],[17,5]],
+     [[17,5],[29.6666667,3.6666667],[39.6666667,.3333333],[47,-5]],
+   ];
+   const edge=(t,side)=>{
+     const i=Math.min(2,Math.floor(t*3)),u=Math.min(1,t*3-i),curve=restingTail[i];
+     const p=cubic(curve,u),before=cubic(curve,Math.max(0,u-.0001)),after=cubic(curve,Math.min(1,u+.0001));
+     const dx=after[0]-before[0],dy=after[1]-before[1],length=Math.hypot(dx,dy);
+     return [p[0]+side*dy/length*3.7,p[1]-side*dx/length*3.7];
+   };
+   const cap=(tip,t)=>{
+     const center=tip?[47,-5]:[-25,-9],start=edge(tip?1:0,tip?1:-1);
+     const x=start[0]-center[0],y=start[1]-center[1],angle=Math.PI*t;
+     return [center[0]+x*Math.cos(angle)-y*Math.sin(angle),center[1]+x*Math.sin(angle)+y*Math.cos(angle)];
+   };
+   const outline=[];
+   for(let i=0;i<=360;i++){
+     const t=i/360,u=t*4.5,segment=Math.min(3,Math.floor(u));
+     const a=u<=4?cubic(standingTail[segment],u-segment):[-31,-33+(u-4)*18];
+     const b=t<.4?edge(t/.4,1):t<.5?cap(true,(t-.4)/.1):t<.9?edge((.9-t)/.4,-1):cap(false,(t-.9)/.1);
+     const root=Math.abs(t-.45)/.55;
+     outline.push([a[0]+6*lower*root+(b[0]-a[0]-6*lower*root)*wrap,
+       a[1]+19*lower*root+(b[1]-a[1]-19*lower*root)*tailDown]);
+   }
+   const tail='M'+outline.map(p=>p.join(' ')).join(' L')+'Z';
+   const drawTail=()=>path(tail,orange,ink,1.8-.2*wrap);
+   drawTail();
+   c.save();c.clip(new Path2D(tail));
+   path(`M${-52+27*wrap} ${-43+34*tailDown}L${-46+21*wrap} ${-42+33*tailDown}
+     M${-48+23*wrap} ${-34+25*tailDown}L${-43+18*wrap} ${-37+28*tailDown}`,null,stripe,2.8);
+   c.restore();
+   const foreleg=(far)=>{
+     const v=paws, step=far?3*Math.sin(Math.PI*v):0;
+     const mix=(a,b)=>a+(b-a)*v;
+     const point=(ax,ay,bx,by)=>`${mix(ax,bx)} ${mix(ay,by)-step}`;
+     const d=far
+       ? `M${point(27,-25,-10,-22)}Q${point(26,-15,-12,-10)} ${point(32,-11,-9,-5)}
+           Q${point(30,-6,-5,0)} ${point(34,-6,1,-4)}L${point(40,-6,2,-22)}
+           Q${point(42,-8,2,-22)} ${point(38,-10,2,-22)}Q${point(36,-15,2,-22)} ${point(35,-25,2,-22)}`
+       : `M${point(31,-26,18,-20)}Q${point(29,-18,20,-9)} ${point(20,-5,18,-4)}
+           Q${point(25,-2,11,-1)} ${point(22,0,8,-6)}L${point(14,0,8,-22)}
+           Q${point(11,0,8,-22)} ${point(12,-5,8,-22)}Q${point(13,-12,8,-22)} ${point(12,-18,8,-22)}`;
+     const color=far?`rgb(${234+21*v} ${160+36*v} ${66+27*v})`:orange;
+     path(d,color);
+   };
+   if(paws<1){
+     const x=35-39*paws, hip=31-35*paws,y=-6+2*paws;
+     path(`M${hip-4} -25Q${hip-5} -15 ${x-3} ${y-5}Q${x-5} ${y} ${x-1} ${y}L${x+5} ${y}Q${x+7} ${y-2} ${x+3} ${y-4}Q${hip+5} -15 ${hip+4} -25Z`,shadow);
+   }
+   const h=-11-13*lower, hy=-6-8*lower;
+   path(`M${-16-12*lower} ${-25+19*lower}Q${-17-12*lower} -15 ${h-3} ${hy-5}
+     Q${h-5} ${hy} ${h-1} ${hy}L${h+5} ${hy}Q${h+7} ${hy-2} ${h+3} ${hy-4}
+     Q${-7-12*lower} -15 ${-8-12*lower} ${-25+19*lower}Z`,shadow);
+   // Keep the original perimeter: the hind paw tucks into the haunch while the forepaw stays planted.
+   path(`M${rearX} ${rearY}C${-40+6*lower} ${-40+26*lower} ${-24-6*lower} ${-46+16*lower} ${-7-9*paws} ${-44+3*paws}
+     C${12-18.666666667*paws} ${-44-4.333333333*paws} ${31-21.666666667*paws} ${-38-8.666666667*paws} ${shoulderX} ${shoulderY}
+     Q29 ${-18-lower} ${20+3*lower} ${-5-2*lower}
+     Q${25-13*lower} ${-2+5*lower} ${22-46*lower} ${-6*lower}
+     L${14-38*lower} ${-6*lower}Q${11-35*lower} ${-6*lower} ${12-36*lower} ${-5-lower}
+     Q${13-37*lower} ${-12+6*lower} ${12-36*lower} ${-18+12*lower}
+     Q${-1-23*lower} ${-14+8*lower} ${-19-5*lower} ${-19+13*lower}
+     Q${-22-2*lower} ${-12+6*lower} ${-26+2*lower} ${-5-lower}
+     Q${-21-3*lower} ${-2-4*lower} -24 ${-6*lower}L${-32+8*lower} ${-6*lower}
+     Q${-35+11*lower} ${-6*lower} ${-34+10*lower} ${-5-lower}
+     Q${-36+12*lower} ${-16+10*lower} ${rearX} ${rearY}Z`,orange);
+   path(`M${-36+10*lower} ${-27+7*lower}Q${-23+4*lower} ${-19+12*lower} ${-8+14*lower} ${-21+12*lower}
+     Q${5+15*lower} ${-20+11*lower} ${16+8*lower} ${-25+8*lower}
+     L${12+12*lower} ${-18+lower}Q${-1+29*lower} ${-14+12*lower} ${-19+23*lower} ${-19+17*lower}
+     Q${-31+6*lower} ${-18+18*lower} ${-36+10*lower} ${-27+7*lower}Z`,shadow,null);
+   path(`M${-26+2*lower} ${-42+11*lower}Q${-25+5.5*lower} ${-32+4*lower} ${-20+5*lower} ${-29+4*lower}L${-19+3*lower} ${-44+8*lower}Z
+     M${-10-19*lower} ${-44+22*lower}Q${-9-15.5*lower} ${-34+14*lower} ${-4-16*lower} ${-30+12*lower}L${-3-20*lower} ${-44+16*lower}Z
+     M${6+9*lower} ${-42+6*lower}Q${5+10*lower} ${-35-lower} ${10+5*lower} ${-31-5*lower}L${13+2*lower} ${-41+5*lower}Z`,stripe,null);
+   foreleg(true);foreleg(false);
+   c.save();c.beginPath();c.rect(-100,-14*wrap,220,40);c.clip();drawTail();c.restore();
+ } else if (seated) {
 path('M-24-6C-34-14-30-30-16-41Q-2-52 15-36Q29-19 23-7Q12 3-24-6Z',orange);
 path('M-26-20Q-19-7 6-9Q20-9 24-17Q28-2 4-2Q-25 0-26-20Z',shadow,null);
 path('M-24-31L-15-25L-16-36ZM-29-22L-20-18L-23-28Z',stripe,null);
@@ -33,7 +123,7 @@ path('M-25-9Q-35-5-30 0Q-9 8 17 5Q36 3 47-5',null,orange,5.8);
  path(`M -36 ${-27+bob} Q -23 ${-19+bob} -8 ${-21+bob} Q 5 ${-20+bob} 16 ${-25+bob} L 12 ${-18+bob} Q -1 ${-14+bob} -19 ${-19+bob} Q -31 ${-18+bob} -36 ${-27+bob} Z`,shadow,null);
  path(`M -26 ${-42+bob} Q -25 ${-32+bob} -20 ${-29+bob} L -19 ${-44+bob} Z M -10 ${-44+bob} Q -9 ${-34+bob} -4 ${-30+bob} L -3 ${-44+bob} Z M 6 ${-42+bob} Q 5 ${-35+bob} 10 ${-31+bob} L 13 ${-41+bob} Z`,stripe,null);
  }
- c.save();c.translate(seated?10:29,seated?-43:-39+bob);c.scale(.9,.9);c.rotate(seated?cuddle*.12:moving?Math.sin(phase)*.018:0);
+ c.save();c.translate(settling?29-19*paws:seated?10:29,settling?-39-4*paws:seated?-43:-39+bob);c.scale(.9,.9);c.rotate(seated?cuddle*.12*sit:moving?Math.sin(phase)*.018:0);
  path('M-23-12L-24-37Q-24-41-20-38L-7-27Q3-29 10-26L23-37Q26-39 26-34L25-10Q32 1 23 11Q12 20-4 17Q-24 17-28 5Q-31-4-23-12Z',orange);
  path('M-20-30L-19-17L-11-24Z','#efb4a0',null);path('M21-30L13-23L22-17Z','#efb4a0',null);
  path('M23-13Q31 1 23 11Q12 20-4 17Q-18 17-24 9Q-7 16 13 9Q23 4 23-13Z',shadow,null);
@@ -58,7 +148,7 @@ if (typeof CHARACTERS !== 'undefined') CHARACTERS.kitten = {
     const squash = Math.max(.65, m.stretch * (1 - .15 * m.crouch - .12 * m.impact));
     ctx.scale(zoom / Math.sqrt(squash), zoom * squash);
     const hit = drawKitten(ctx, 0, 0, 1, m.phase * Math.PI * 2, m.state === 'walk',
-      at.appearance?.accessories?.hat || at.hat || 'none', at.face, ['sit','cuddle'].includes(m.state), m.cuddle || 0);
+      at.appearance?.accessories?.hat || at.hat || 'none', at.face, ['sit','cuddle'].includes(m.state) && m.sit!==0, m.cuddle || 0, m.sit);
     const outline = new Path2D();
     outline.addPath(hit, base.inverse().multiply(ctx.getTransform()));
     ctx.restore(); return outline;

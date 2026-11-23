@@ -1,5 +1,5 @@
 // Browser checks without a test dependency. CHROME can point at another Chromium executable.
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -48,6 +48,25 @@ try {
   await call('Page.navigate', { url: pathToFileURL(resolve('src/index.html')).href + '?demo' });
   for (let i = 0; i < 100 && !await run('typeof fan !== "undefined"'); i++) await new Promise(r => setTimeout(r, 30));
   await run(`document.fonts.load('14px "Lilita One"')`);
+  // Keep the approved release drawings intact while adding transition frames.
+  for (const id of ['nematode','croissant','kitten']) {
+    const source=execFileSync('git',['show',`v0.3.13:src/characters/${id}.js`],{encoding:'utf8'});
+    await run(`{
+      const released={};new Function('CHARACTERS','drawHat',${JSON.stringify(source)})(released,drawHat);
+      for(const state of ['idle','walk','held','fly','stomp','sit','cuddle'])
+        for(const hat of Object.keys(HATS))for(const face of [-1,1]) {
+          function picture(character) {
+            const canvas=document.createElement('canvas');canvas.width=canvas.height=300;
+            const instance=character.create?.()||character;
+            instance.draw(canvas.getContext('2d'),{x:150,ground:230,face,rot:.1,accel:[0,0],dt:.016,now:1000,hat},
+              {state,cuddle:1,phase:.3,t:1,stretch:1,hop:0,crouch:0,impact:0,airborne:false});
+            return canvas.toDataURL();
+          }
+          if(picture(released['${id}'])!==picture(CHARACTERS['${id}']))
+            throw Error('Changed released artwork: ${id} '+state+' '+hat+' '+face);
+        }
+    }`);
+  }
   await run(`
     window.step = seconds => { for (let i = 0; i < seconds * 60; i++) tick(last + 1000 / 60); };
     Object.assign(n, {x: 450, y: 550, state: 'idle', t: 0, home: 450, nextWander: 100});
@@ -249,12 +268,12 @@ try {
     together.guest=null; together.active=false;
   `);
   await run(`
-    actors.byId.clear();delivery.guest=null;delivery.queue.length=0;together.guest=null;together.active=false;
+    actors.byId.clear();delivery.guest=null;delivery.queue.length=0;together.guest=null;together.active=false;together.presentation=null;
     setCharacter('kitten');setHat('cap');
     Object.assign(n,{x:450,y:550,state:'idle',home:450,nextWander:100});want.mode='free';
     const peer={id:'partner',appearance:{character:'croissant',accessories:{hat:'beanie'}}};
     for(const mode of ['together','picnic']) {
-      selectScene({mode,future:{setting:'retained'}},peer);step(4);
+      selectScene({mode,future:{setting:'retained'}},peer);step(mode==='picnic'?18:4);
       check(together.guest.ready && together.guest.visible,'Shared actor is on screen');
       const actor=together.guest;
       for(const action of ['heart','love']) {
@@ -266,7 +285,7 @@ try {
         step(4);check(completed===1 && together.guest===actor,'One receipt, persistent actor remains');
       }
       const saved=localStorage.getItem('nematode-session');
-      together.guest=null;together.active=false;actors.byId.clear();restoreScene();step(4);
+      together.guest=null;together.active=false;together.presentation=null;actors.byId.clear();restoreScene();step(mode==='picnic'?18:4);
       check(together.mode===mode && session.future.setting==='retained','Opaque mode state restores across restart');
       check(localStorage.getItem('nematode-session')===saved,'Restoration preserves future state fields');
     }
@@ -274,6 +293,30 @@ try {
   `);
   await call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile('/private/tmp/nematode-picnic-mode.png',Buffer.from(r.data,'base64')));
   await run(`
+    // The curled and flat cloth meet at the same material edge, throughout unfurling.
+    for(const spread of [0,.1,.5,.9,.999,1])for(const v of [0,.5,1]) {
+      const a=blanketPoint(220,52,spread,spread,v);
+      const b=blanketPoint(220,52,spread,Math.min(1,spread+1e-7),v);
+      check(Math.hypot(a[0]-b[0],a[1]-b[1])<.01,'Rolled fabric stays attached to the flat fabric');
+    }
+    // Choreography preserves actor position and visits every physical setup/packing stage.
+    for(const id of Object.keys(CHARACTERS)) {
+      const guest={character:createCharacter({character:id}),x:-150,y:550,phase:0,visible:false};
+      const picnic=new PicnicScene(guest), phases=new Set();let previous=guest.x, placementX=null, unrollTime=0;
+      const at={x:450,ground:550,dt:1/60,now:0,settled:true};
+      for(let i=0;i<1400;i++) {
+        picnic.draw(ctx,at,character(),guest,true);phases.add(picnic.phase);
+        if(picnic.phase==='place') {placementX??=guest.x;check(guest.x===placementX,'Placement lowers supplies without lateral travel');}
+        if(picnic.phase==='unroll')unrollTime+=at.dt;
+        check(Math.abs(guest.x-previous)<5,'Picnic never teleports a character');previous=guest.x;
+      }
+      check(['arrive','place','unroll','approach','sit','rest'].every(p=>phases.has(p)),'Every setup phase plays');
+      check(unrollTime<.6,'Unfurling is a quick roll');
+      check(guest.ready && picnic.sit===1 && picnic.spread===1,'Ready only after setup');
+      picnic.exiting=true;picnic.returning=true;
+      for(let i=0;i<3000&&!picnic.done;i++){picnic.draw(ctx,at,character(),guest,true);phases.add(picnic.phase);}
+      check(picnic.done && ['rise','retrieve','pack','lift','depart','return'].every(p=>phases.has(p)),'Pack up and return without a cut');
+    }
     // Separating during an arrival must not acknowledge a gesture that never played.
     const registry=new Actors(), scene=new Together(registry);let given=0,receipts=0;
     const visit=new Delivery(()=>given++,registry), sender=createCharacter({character:'nematode'});

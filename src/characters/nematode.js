@@ -17,9 +17,13 @@ function drawNematode(ctx, p) {
   let x = 0, y = 0;
   for (let i = 0; i <= N; i++) {
     const s = i / N;
-    const th = p.seated
+    let th = p.seated
       ? .12 + 1.55 * nemaEase(0, .45, s)
       : 0.58 + 1.42 * nemaEase(0, .8, s) * curl + wave * Math.sin(2 * Math.PI * (1.2 * s - ph));
+    if(p.settle !== undefined) {
+      const u=nemaEase(.2*s,.65+.35*s,p.settle);
+      th+=(.12+1.55*nemaEase(0,.45,s)-th)*u;
+    }
     const t = [Math.cos(th), Math.sin(th)];
     if (i) { x += t[0] * st / N; y += t[1] * st / N; }
     pts.push([x, y]); T.push(t);
@@ -117,7 +121,8 @@ if (typeof CHARACTERS !== 'undefined') CHARACTERS.nematode = {
   draw(ctx, at, m) {
     const p = { x: at.x, ground: at.ground - m.hop, scale: 64 * (at.zoom ?? 1), face: at.face, rot: at.rot, stretch: m.stretch, hat: at.appearance?.accessories?.hat || at.hat };
     const surge = Math.sin(2 * Math.PI * m.phase);
-    if (['sit','cuddle'].includes(m.state)) Object.assign(p, { seated: true, stretch: .9, mouth: .65 });
+    if(m.sit>0 && m.sit<1) Object.assign(p,{settle:m.sit,stretch:1-.1*m.sit,mouth:1-.35*m.sit});
+    else if (['sit','cuddle'].includes(m.state) && m.sit!==0) Object.assign(p, { seated: true, stretch: .9, mouth: .65 });
     else if (m.state === 'walk') Object.assign(p, { phase: m.phase, wave: .16, curl: 1 - .12 * surge,
       stretch: 1 + .06 * surge, hop: 3 * Math.max(0, surge), ground: at.ground, mouth: .8 + .2 * surge });
     else if (m.state === 'held') Object.assign(p, { phase: m.phase, wave: .3, curl: 1.15, mouth: 1.2 }); // wriggling

@@ -120,7 +120,7 @@ Confirmed successful in real use on November 22, 2026. Preserve this release’s
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, commit, then tag it:
 
 ```bash
-git tag v0.3.13 && git push --tags
+git tag v0.3.14 && git push --tags
 ```
 
 GitHub Actions builds the Mac and Windows versions and publishes a release with `latest.json`, which installed copies check for updates. Updates are signed with `~/.tauri/nematode.key`, which is also stored as the `TAURI_SIGNING_PRIVATE_KEY` repo secret. If that key is lost, installed copies can't update.
@@ -140,8 +140,11 @@ The Hat menu offers a pink beret, blue baseball cap, cream beanie, and ribbon su
 
 ## Picnic Mode
 
-The four-part fan adds Picnic Mode. All three characters can sit together, wearing their chosen hats.
+The four-part fan adds Picnic Mode. The companion brings a basket and rolled blanket, unfurls it, then
+both characters settle into their own seated poses and cuddle, wearing their chosen hats.
 End picnic returns to walking together; Separate sends the companion home. Hearts and love use the
 companion already on screen. Shared modes are saved as one extensible state object and restored after updates.
 Releases can notify running apps over their existing WebSocket; signed GitHub updates remain the source.
 Release 0.3.13 introduces Picnic Mode and live release notifications.
+
+Release 0.3.14 adds the picnic arrival and per-character sitting animations while preserving the v0.3.13 artwork.

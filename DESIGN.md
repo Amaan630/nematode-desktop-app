@@ -149,3 +149,17 @@ The four-action fan grows to a 152 px radius while retaining the same font/icon 
 When already together, the existing companion gives the gesture without another walk-in.
 Nematode sits with a tucked lower tail and an upright upper spine; its normal face, bands and hat remain
 owned by `drawNematode`. Reduced motion holds the cuddle pose still and omits ambient floating hearts.
+
+### Picnic motion
+
+Keep v0.3.13's character drawings and seated poses as the visual reference. New motion must lead into
+those drawings without replacing the normal walk, changing proportions, or thinning the ink.
+`PicnicScene` brings the companion in with the basket and rolled blanket, lowers the supplies at the
+placement spot, unfurls the cloth in 550 ms, and walks the companion onto it. Characters spend 1.1 seconds
+settling into their own seated poses, then lean together. Packing up reverses those physical steps.
+
+The blanket is one checkered material surface throughout rolling and unrolling. The characters' central
+drawing functions own their custom sitting movement through `motion.sit`; no scene-local character copies,
+shared joint system, opacity crossfade, or rope entrance. Inspect full motion at desktop size as well as
+individual frames. Pixel comparisons against v0.3.13 protect the existing art; they do not establish that
+new in-between frames look good.

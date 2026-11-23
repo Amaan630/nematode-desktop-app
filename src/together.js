@@ -2,12 +2,15 @@
 class Together {
   constructor(actors = new Actors()) { this.actors = actors; this.active = false; this.guest = null; this.mode = "together"; }
 
-  join(character, id = "preview-peer", mode = "together") {
+  join(character, id = "preview-peer", mode = "together", presentation = null) {
+    const changed=this.mode!==mode;
     this.mode = mode;
+    if(changed && this.presentation) {this.presentation.exiting=true;this.presentation.returning=mode!=='solo';this.nextPresentation=presentation;}
     if (this.active && this.guest.id === id) {
       const current = this.guest.character;
       if (current.appearance && current.appearance.character === character.appearance?.character) current.appearance = character.appearance;
       else this.guest.character = character.create?.() || character;
+      if(changed && presentation && !this.presentation) this.presentation=presentation(this.guest);
       return;
     }
     if (this.guest) this.actors.release(this.guest, 'scene');
@@ -16,22 +19,29 @@ class Together {
     const alreadyHere = this.guest.visible;
     Object.assign(this.guest, { x: this.guest.x ?? -character.width, t: alreadyHere ? 2 : 0,
       phase: 0, waiting: !alreadyHere, leaving: false });
+    if(presentation) this.presentation=presentation(this.guest);
   }
 
   separate() {
     this.active = false;
+    if(this.presentation) {this.presentation.exiting=true;this.presentation.returning=false;this.nextPresentation=null;}
     if (this.guest) { this.guest.leaving = true; this.guest.t = 0; }
   }
 
   get arriving() { return this.active && !this.guest?.waiting && this.guest?.t < 2; }
 
-  draw(ctx, at, owner, visible, scene) {
+  draw(ctx, at, owner, visible) {
     const g = this.guest;
     if (!g) return;
     if (!visible) { g.visible = false; if (!this.active) { this.actors.release(g, 'scene'); this.guest = null; } return; }
     if (g.waiting && !g.leaving) {
       if (!at.settled) return; // let the resident arrive before casting the rope
       g.waiting = false;
+    }
+    if(this.presentation) {
+      const hit=this.presentation.draw(ctx,at,owner,g,matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if(this.presentation.done){this.presentation=this.active&&this.nextPresentation?this.nextPresentation(g):null;this.nextPresentation=null;g.t=2;g.ready=false;}
+      return hit;
     }
     const dt = at.dt, c = g.character;
     g.t += dt;
@@ -52,7 +62,6 @@ class Together {
     const moving = Math.abs(g.x - oldX) > .15 || Math.abs(g.y - oldY) > .15;
     g.phase = (g.phase + (moving ? dt * c.gait.hz : 0)) % 1;
     g.ready = g.t >= 2 && !g.leaving;
-    if (g.ready && at.settled && scene?.draw) { g.visible = true; return scene.draw(ctx, at, owner, g); }
     g.poseHeight = c.height;
     if (!g.leaving || g.t < .35) {
       ctx.save();

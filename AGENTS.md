@@ -491,3 +491,19 @@ binds the secret; GitHub Actions posts after publishing. The native updater stil
 GitHub update, coalesces checks, and retains launch/daily checks. Summoning uses its existing one-use marker;
 shared scene state restores through the normal session path, without mode-specific updater branches.
 The scene migration and release hook were deployed through Terraform on 2026-11-22, preserving both users and stored actions. The release hook secret is configured in GitHub Actions. See cloudflare/README.md.
+
+### Picnic entrance and released artwork
+
+The November 22 reset uses **v0.3.13** as the approved character-art baseline. Ordinary states, seated
+poses, hats, colors, ink widths, and generated icons must stay identical to that release. Do not restore
+the discarded joint system or redesign characters while changing an animation. `tests/social.mjs` compares
+210 current renders against that tag; fetch `v0.3.13` if it is absent in a shallow checkout.
+
+`PicnicScene` in `src/picnic.js` owns arrival, placing the supplies, unfurling, approaching, sitting, and
+packing up. The companion carries the same blanket mesh that unfurls; there is no second rolled sprite
+or opacity swap. Together's scene presentation hook runs this choreography without casting the Together rope.
+The character adapter receives optional `motion.sit` (0 standing, 1 released seated pose). Each character
+owns its in-between drawing: Kitten plants its forepaws, lowers its haunches, and wraps its tail; Croissant
+settles onto its stubby feet; Nematode curls from the tail upward. No shared skeleton or joint renderer.
+Absent `motion.sit` keeps the existing state drawing. Hats continue to use the original head attachment.
+Review the complete rendered entrance and exit, including the frames between poses, before any release.

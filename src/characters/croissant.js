@@ -13,7 +13,8 @@ const CROISSANT_INK = {
 function drawCroissant(ctx, p) {
   const canvasTransform = ctx.getTransform();
   const C = CROISSANT_INK, S = p.scale, f = p.face ?? 1, walk = p.walk ?? 0, ph = p.phase ?? 0, sq = p.squash ?? 0;
-  const [jl, jr] = p.jiggle ?? [0, 0], OUT = .024, LEG = p.seated ? .055 : .17, wave = Math.sin(2 * Math.PI * ph);
+  const [jl, jr] = p.jiggle ?? [0, 0], OUT = .024, settle = p.settle || 0;
+  const LEG = p.settle !== undefined ? .17-.115*settle : p.seated ? .055 : .17, wave = Math.sin(2 * Math.PI * ph);
   const lift = [Math.max(0, wave), Math.max(0, -wave)].map(v => .07 * walk * v); // left, right boot
   const rock = .08 * walk * wave, hipY = -LEG - .025 * walk * Math.abs(wave);
 
@@ -34,19 +35,19 @@ function drawCroissant(ctx, p) {
   ctx.lineJoin = ctx.lineCap = 'round';
 
   // --- Legs: short and stubby, each boot lifts and steps forward in turn ---
-  if (p.seated) {
+  if (p.seated && p.settle === undefined) {
     for (const side of [-1,1]) {
       const foot = new Path2D(); foot.ellipse(side*.19, -.01, .12, .052, side*.25, 0, 7);
       ctx.lineWidth=OUT;ctx.strokeStyle=C.outline;ctx.stroke(foot);
       cel(foot,C.leg,C.legShade,-.02,-.01);
     }
   } else [-1, 1].forEach((side, i) => {
-    const up = lift[i], fwd = .4 * up, hx = side * .085 + fwd / 2;
+    const up = lift[i], fwd = .4 * up, hx = side * (.085+.105*settle) + fwd / 2;
     const leg = new Path2D(); leg.roundRect(hx - .05, hipY - .04, .1, LEG - up + .02, .05);
-    const boot = new Path2D(); boot.ellipse(hx + fwd / 2 + .02, -up - .045, .08, .048, 0, 0, 7);
+    const boot = new Path2D(); boot.ellipse(hx + fwd / 2 + .02*(1-settle), -up - .045+.035*settle, .08+.04*settle, .048+.004*settle, side*.25*settle, 0, 7);
     for (const shape of [leg, boot]) {
       ctx.lineWidth = OUT; ctx.strokeStyle = C.outline; ctx.stroke(shape);
-      cel(shape, C.leg, C.legShade, -.03, -.015);
+      cel(shape, C.leg, C.legShade, -.03+.01*settle, -.015+.005*settle);
     }
   });
 
@@ -126,12 +127,15 @@ if (typeof CHARACTERS !== 'undefined') CHARACTERS.croissant = {
   jiggle: new CroissantJiggle(),
   create() { return { ...this, jiggle: new CroissantJiggle() }; }, // each visitor gets its own springs
   draw(ctx, at, m) {
+    const transition=m.sit>0 && m.sit<1;
+    const settle=transition?m.sit:undefined;
+    const seated=['sit','cuddle'].includes(m.state) && m.sit!==0;
     return drawCroissant(ctx, {
       x: at.x, ground: at.ground - m.hop, hat: at.appearance?.accessories?.hat || at.hat, scale: 70 * (at.zoom ?? 1), face: at.face, rot: at.rot,
       walk: m.state === 'walk' ? 1 : 0, phase: m.phase,
-      seated: ['sit','cuddle'].includes(m.state),
+      seated, settle,
       squash: 1 - m.stretch, blink: m.state === 'cuddle' && m.cuddle > .4 ? 1 : (at.now / 1000) % 3.7 < .12 ? 1 : 0,
-      jiggle: ['sit','cuddle'].includes(m.state) ? [-.28,-.12] : this.jiggle.step(at.dt, at.accel[0] * at.face, at.accel[1], 70),
+      jiggle: transition ? [-.28*settle,-.12*settle] : seated ? [-.28,-.12] : this.jiggle.step(at.dt, at.accel[0] * at.face, at.accel[1], 70),
     });
   },
 };

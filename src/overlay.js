@@ -10,9 +10,10 @@
 //   draw(ctx, at, motion),     at: { x, ground, face, rot, accel: [ax, ay] px/s², dt, now, zoom? (default 1) }
 // }                            draw returns his outline (Path2D, screen px) for grabbing.
 //
-// motion: { state: 'walk' | 'stomp' | 'idle' | 'leap' | 'held' | 'fly',
+// motion: { state: 'walk' | 'stomp' | 'idle' | 'leap' | 'held' | 'fly' | 'sit' | 'cuddle',
 //           phase (cycle 0..1), t (s in this state), stretch (1 normal, <1 squashed, >1 tall),
-//           hop (px off the ground), crouch (0..1 winding up), impact (0..1 just landed), airborne }
+//           hop (px off the ground), crouch (0..1 winding up), impact (0..1 just landed), airborne,
+//           sit? (0 standing .. 1 seated; absent uses state), cuddle? (0..1) }
 
 const SPEED = 210;                           // walking px/s
 const STOMP = 0.62, STOMPS = 3, REST = 1.4;  // 3 stomps, then a breather
@@ -82,7 +83,7 @@ function start() { if (!running) { running = true; last = performance.now(); req
 const clampX = x => Math.max(character().width, Math.min(innerWidth - character().width, x));
 function goal() {
   if (delivery.active && want.mode === 'away') return { x: innerWidth * .6, y: want.floor, then: 'idle' };
-  if (scenes[together.mode]?.resting && together.active) return { x: n.home ?? clampX(innerWidth/2), y: want.floor, then: 'idle' };
+  if (together.presentation || (scenes[together.mode]?.resting && together.active)) return { x: n.home ?? clampX(innerWidth/2), y: want.floor, then: 'idle' };
   if (want.mode === 'tab') return { x: want.x, y: want.y, then: 'stomp' };
   if (want.mode === 'free') {
     n.home ??= clampX(innerWidth * (.25 + Math.random() * .5));
@@ -218,7 +219,7 @@ function frame(now) {
 
 function tick(now) {
   const dt = Math.max(.001, Math.min(.05, (now - last) / 1000)); last = now; // never 0: speeds divide by it
-  if (fan.open || together.arriving || (scenes[together.mode]?.resting && together.active && n.state === 'idle')) { /* keep him still while choosing or pulling the rope */ }
+  if (fan.open || together.arriving || ((together.presentation || (scenes[together.mode]?.resting && together.active)) && n.state === 'idle')) { /* keep him still while choosing or pulling the rope */ }
   else if (n.state === 'walk') walk(dt);
   else if (n.state === 'leap') {
     const u = Math.min(1, (n.t += dt) / n.dur);
@@ -246,7 +247,7 @@ function tick(now) {
   const delivering = delivery.active;
   delivery.draw(ctx, { x: n.x, ground: n.y, dt, now }, character());
   if (delivering && !delivery.active && ['idle', 'stomp', 'walk'].includes(n.state)) go();
-  const sceneHit = together.draw(ctx, { x: n.x, ground: n.y, dt, now, settled: ['idle', 'stomp'].includes(n.state) }, character(), n.state !== 'gone', scenes[together.mode]);
+  const sceneHit = together.draw(ctx, { x: n.x, ground: n.y, dt, now, settled: ['idle', 'stomp'].includes(n.state) }, character(), n.state !== 'gone');
   hit = n.state === 'gone' ? null
     : sceneHit || character().draw(ctx, { x: n.x, ground: n.y, face: n.face, rot: n.rot, accel, dt, now }, motion);
   drawDust(dt);
@@ -325,15 +326,7 @@ const scenes = {
   together: {},
   picnic: {
     resting: true,
-    draw(ctx, at, owner, guest) {
-      const separation = (owner.seated.width + guest.character.seated.width) * .29;
-      const base = ctx.getTransform(), origin = at.x + separation/2 + 5;
-      ctx.save(); ctx.translate(origin, at.ground - 18);
-      const result = drawPicnic(ctx, owner, guest.character, guest.t, reducedMotion.matches);
-      const hit = new Path2D(); hit.addPath(result.hit, base.inverse().multiply(ctx.getTransform()));
-      guest.x = origin + result.rightX; guest.y = at.ground - 18; guest.poseHeight = guest.character.seated.height;
-      ctx.restore(); return hit;
-    },
+    create: guest => new PicnicScene(guest),
   },
 };
 let session = { mode: 'solo' };
@@ -344,7 +337,7 @@ function selectScene(state, peer = connection?.peer) {
     peer ||= { id: 'preview-peer', appearance: { ...appearance(), character: Object.keys(CHARACTERS).find(id => id !== appearance().character) || appearance().character } };
     const guest = createCharacter(peer);
     if (!guest) return false;
-    together.join(guest, peer.id, state.mode);
+    together.join(guest, peer.id, state.mode, scenes[state.mode].create);
     if (want.mode === 'away') {
       if (tauri) tauri.invoke('summon_for_together').catch(console.error);
       else nema({ mode: 'free', floor: want.floor });
